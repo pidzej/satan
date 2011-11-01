@@ -11,6 +11,7 @@ package Satan::Account;
 use Satan::Tools qw(caps);
 use IO::Socket;
 use DBI;
+use POSIX;
 use Data::Dumper;
 use Net::Domain qw(hostname);
 use feature 'switch';
@@ -23,9 +24,9 @@ sub new {
 	my $class = shift;
 	my $self = { @_	};
 	my $dbh_system = $self->{dbh_system};
-	
-	$self->{account_authcode}      = $dbh_system->prepare("UPDATE uids SET authcode=? WHERE uid=?");
-	$self->{account_show_user}     = $dbh_system->prepare("SELECT id,firstname,lastname,lang,type,vat,phone,company,address,postcode,city,country,mail,users.date 
+	my $dbh_pay    = $self->{dbh_pay};
+
+	$self->{account_show_user}     = $dbh_system->prepare("SELECT id,login,firstname,lastname,lang,type,vat,phone,company,address,postcode,city,country,mail,discount,users.date 
                                                                FROM users JOIN uids USING(id) WHERE uid=?");
 	$self->{account_show_accounts} = $dbh_system->prepare("SELECT uid,login,shell,server,date,valid,block,special,sponsor,test
 	                                                       FROM uids where id=?");
@@ -34,6 +35,8 @@ sub new {
 	$self->{account_update_user}   = $dbh_system->prepare("UPDATE users SET firstname=?,lastname=?,lang=?,type=?,vat=?,phone=?,mail=?,company=?,
 	                                                                        address=?,postcode=?,city=?,country=? WHERE id=?");
 	$self->{event_add}             = $dbh_system->prepare("INSERT INTO events(uid,date,daemon,event,previous,current) VALUES(?,NOW(),'account',?,?,?)");
+		
+	$self->{pay_user_add}          = $dbh_pay->prepare("REPLACE INTO user(id,login,amount,first_name,last_name,mail,lang) VALUES(?,?,?,?,?,?,?)");
         
 	bless $self, $class;
 	return $self;
@@ -266,13 +269,102 @@ sub edit {
 }
 
 sub pay {
-	my $self  = shift;
-	my $uid   = $self->{uid};
-	my $login = $self->{login};
-	my $account_authcode = $self->{account_authcode};
-        my $authcode = join('',map { ('a'..'z',0..9)[rand 36] } 1..16);                                                                                                                                              
-	$account_authcode->execute($authcode,$uid);
-        return "\033[1;32mTo pay please visit the following site:\033[0m\nhttps://signup.rootnode.net/payment/$authcode/$login.html\n";              
+	my $self   = shift;
+	my $uid    = $self->{uid};
+	my $login  = $self->{login};
+	my $client = $self->{client};
+
+	my $pay_user_add      = $self->{pay_user_add};
+	my $account_show_user = $self->{account_show_user};
+	$account_show_user->execute($uid);
+	
+	my $user = $account_show_user->fetchall_hashref('login');
+	   $user = $user->{$login};
+
+	my $amount = {};
+	   $amount->{total} = {};
+
+	# Currency
+#	if($user->{country} =~ /^PL$/i) {
+		# PLN
+		$amount->{year}    = 180;
+		$amount->{quarter} = 54;
+		$amount->{prefix}  = '';
+		$amount->{suffix}  = 'zł';
+#	} else {
+#		# €
+#		$amount->{year}    = 50;
+#		$amount->{quarter} = 15;
+#		$amount->{prefix}  = '€';
+#		$amount->{suffix}  = '';
+#	}
+	
+	# VAT rate
+	my $vat;
+	if($user->{type} eq 'company' and $user->{country} =~ /^(BE|BG|CZ|DK|DE|EE|IE|EL|ES|FR|IT|CY|LV|LT|LU|HU|MT|NL|AT|PT|RO|SI|SK|FI|SE|UK)$/i) {
+		# VAT = 0%
+		$vat=0;
+	} else {
+		$vat = 23;
+	}
+	
+	my $max_length=0;
+	foreach my $period (qw(year quarter)) {
+		$amount->{$period} = sprintf('%.2f', $amount->{$period} + ( $amount->{$period} * $vat / 100 ));
+		$max_length = length($amount->{$period}) if length($amount->{$period}) > $max_length;
+	}
+	
+
+	# Discount
+	if($user->{discount}) {
+		my $indent = {};
+		foreach my $period (qw(year quarter)) {
+			my $indent = " " x (6-length($amount->{$period}));
+			$amount->{total}->{$period} = $indent.$amount->{prefix}.$amount->{$period}.$amount->{suffix}
+			                            . " - \033[1;35m".$user->{discount}."% discount\033[0m = ";
+			$amount->{$period} = sprintf('%.2f', $amount->{$period} - ( $amount->{$period} * $user->{discount} / 100 ));
+			$amount->{total}->{$period} .= "\033[1m".$indent.$amount->{prefix}.$amount->{$period}.$amount->{suffix}."\033[0m";
+		}
+	} else {
+		foreach my $period (qw(year quarter)) {
+			my $indent = " " x ($max_length-length($amount->{$period}));
+			$amount->{total}->{$period} = "\033[1m".$indent.$amount->{prefix}.$amount->{$period}.$amount->{suffix}."\033[0m";
+		}
+	}
+
+
+	print $client "\n\033[1;32mPayment period (incl. $vat% VAT)\033[0m\n\n"
+	            . " (Y)ear     ".$amount->{total}->{year}."\n"
+	            . " (Q)uarter  ".$amount->{total}->{quarter}."\n\n";
+	
+	my $period;
+	while(1) {
+		print $client "(INT) \033[1;33mChoose year or quarter\033[0m [Y/q] \n";
+		my $answer = <$client>;
+		if($answer =~ /^(y|)$/i) {
+			$period = 'year';
+			last;
+		} elsif($answer =~ /^q$/i) {
+			$period = 'quarter';
+			last;
+		}
+	}
+	print $client ucfirst $period.".\n\n";
+	
+	my $authcode = join('',map { ('a'..'z',0..9)[rand 36] } 1..16);
+	
+	$amount->{$period} =~ s/\.//;
+	$pay_user_add->execute(
+		$authcode,
+		$login,
+		$amount->{$period},
+		$user->{firstname},
+		$user->{lastname},
+		$user->{mail}, 
+		$user->{lang}
+	);
+	
+	return "Payment URL is \033[1;34mhttps://rootnode.net/pay/".$authcode."\033[0m\n";
 }
 	
 sub help {

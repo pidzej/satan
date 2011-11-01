@@ -31,6 +31,7 @@
 use IO::Socket;
 use DBI;
 use Data::Dumper;
+use FindBin qw($Bin);
 use feature 'switch';
 use warnings;
 use strict;
@@ -45,13 +46,13 @@ $|++;
 $SIG{CHLD} = 'IGNORE'; # don't wait for retarded kids
 
 unless (@ARGV) {
-	open STDOUT,">>","/adm/satan/access.log";
-	open STDERR,">>","/adm/satan/error.log";
-	chmod 0600,"/adm/satan/access.log";
-	chmod 0600,"/adm/satan/error.log";
+	open STDOUT,">>","$Bin/access.log";
+	open STDERR,">>","$Bin/error.log";
+	chmod 0600,"$Bin/access.log";
+	chmod 0600,"$Bin/error.log";
 }
-my $sockfile = '/adm/satan/satan.sock';
-`rm -f -- /adm/satan/lock/*`;
+my $sockfile = "$Bin/satan.sock";
+`rm -f -- $Bin/lock/*`;
 unlink $sockfile;
 
 my $socket = new IO::Socket::UNIX (
@@ -66,9 +67,12 @@ binmode( $socket, ':utf8' );
 
 ## dbi 
 my $dbh_system = DBI->connect("dbi:mysql:rootnode;mysql_read_default_file=/root/.my.system.cnf",undef,undef,{ RaiseError => 0, AutoCommit => 1 });
+my $dbh_pay    = DBI->connect("dbi:mysql:my6667_pay:mysql_read_default_file=/root/.my.pay.cnf",undef,undef,{ RaiseError => 0, AutoCommit=>1 });
 
 $dbh_system->{mysql_auto_reconnect} = 1;
-$dbh_system->{mysql_enable_utf8} = 1;
+$dbh_system->{mysql_enable_utf8}    = 1;
+$dbh_pay->{mysql_auto_reconnect}    = 1;
+$dbh_pay->{mysql_enable_utf8}       = 1;
 
 ## main 
 while(my $client = $socket->accept()) {
@@ -87,13 +91,13 @@ while(my $client = $socket->accept()) {
 		next;
 	}
         if(fork() == 0) {
-                if(-f "/adm/satan/lock/$uid" and $uid) {
+                if(-f "$Bin/lock/$uid" and $uid) {
 			print "[$now] Connection refused: too many sessions for user $uid.\n";
                         print $client "Only one session is allowed. Dying.\n";
                         close($client);
                         exit 0;
                 } else {
-                        open LOCK,">","/adm/satan/lock/$uid";
+                        open LOCK,">","$Bin/lock/$uid";
                         close LOCK;
                 }
                 $client->autoflush(1);
@@ -148,6 +152,7 @@ while(my $client = $socket->accept()) {
 						uid        => $uid,
 						client     => $client,
 						dbh_system => $dbh_system,
+						dbh_pay    => $dbh_pay
 					);
 
 					## commands
@@ -239,7 +244,7 @@ while(my $client = $socket->accept()) {
 			last;
                 }
                 close($client);
-                unlink "/adm/satan/lock/$uid";
+                unlink "$Bin/lock/$uid";
 		exit;
         }
 }

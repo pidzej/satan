@@ -111,6 +111,7 @@ CREATE TABLE `users` (
   `city` varchar(30) DEFAULT NULL,
   `country` varchar(2) DEFAULT NULL,
   `mail` varchar(60) NOT NULL,
+  `discount` SMALLINT UNSIGNED DEFAULT '0',
   `know` enum('google','url','friend') DEFAULT NULL,
   `specify` varchar(80) DEFAULT NULL,
   PRIMARY KEY (`id`),
