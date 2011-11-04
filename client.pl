@@ -9,12 +9,13 @@
 use strict;
 use IO::Socket;
 use Encode;
+use FindBin qw($Bin);
 use utf8;
 $|++;
 
 $SIG{INT} = 'IGNORE';
 my $sock = new IO::Socket::UNIX (
-				Peer => "/adm/satan/satan.sock",
+				Peer => "$Bin/satan.sock",
                                 Type => SOCK_STREAM,
 				Timeout => 10, 
                                 );

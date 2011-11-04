@@ -358,6 +358,7 @@ sub pay {
 		$authcode,
 		$login,
 		$amount->{$period},
+		$period,
 		$user->{firstname},
 		$user->{lastname},
 		$user->{mail}, 
