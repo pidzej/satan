@@ -36,7 +36,7 @@ sub new {
 	                                                                        address=?,postcode=?,city=?,country=? WHERE id=?");
 	$self->{event_add}             = $dbh_system->prepare("INSERT INTO events(uid,date,daemon,event,previous,current) VALUES(?,NOW(),'account',?,?,?)");
 		
-	$self->{pay_user_add}          = $dbh_pay->prepare("REPLACE INTO user(id,login,amount,first_name,last_name,mail,lang) VALUES(?,?,?,?,?,?,?)");
+	$self->{pay_user_add}          = $dbh_pay->prepare("REPLACE INTO user(id,login,amount,period,first_name,last_name,mail,lang) VALUES(?,?,?,?,?,?,?)");
         
 	bless $self, $class;
 	return $self;
