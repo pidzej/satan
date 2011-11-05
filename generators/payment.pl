@@ -17,13 +17,13 @@ $|++;
 my $dbh_pay    = DBI->connect("dbi:mysql:my6667_pay;mysql_read_default_file=/root/.my.pay.cnf",undef,undef,{ RaiseError => 1, AutoCommit => 0});
 my $dbh_system = DBI->connect("dbi:mysql:rootnode;mysql_read_default_file=/root/.my.system.cnf",undef,undef,{ RaiseError => 1, AutoCommit => 0 });
 
-my $payu_get  = $dbh_pay->prepare("SELECT login, trans_id, trans_amount, trans_desc2, trans_pay_type, DATE(trans_create) FROM payu WHERE trans_status=99 AND done=0");
+my $payu_get  = $dbh_pay->prepare("SELECT login, trans_id, trans_amount, trans_desc2, trans_pay_type, DATE(trans_create), UNIX_TIMESTAMP(trans_create) FROM payu WHERE trans_status=99 AND done=0");
 my $payu_done = $dbh_pay->prepare("UPDATE payu SET done=1 WHERE trans_id=?");
 
 my $payment_add   = $dbh_system->prepare("INSERT INTO payments(uid,trans_id,date,type,bank,amount,currency) VALUES (?,?,?,?,?,?,?)");
 my $payment_check = $dbh_system->prepare("SELECT trans_id FROM payments WHERE trans_id=?");
 
-my $uid_check  = $dbh_system->prepare("SELECT id,uid,mail,lang,UNIX_TIMESTAMP(valid),block,del FROM users LEFT JOIN uids USING(id) WHERE login=?");
+my $uid_get    = $dbh_system->prepare("SELECT id,uid,mail,lang,UNIX_TIMESTAMP(valid),block,del FROM users LEFT JOIN uids USING(id) WHERE login=?");
 my $uid_update = $dbh_system->prepare("UPDATE uids SET block=0, del=0, valid=? WHERE uid=?");
 
 my $user_update = $dbh_system->prepare("UPDATE users SET discount=0 WHERE id=?");
@@ -32,7 +32,7 @@ my $event_add = $dbh_system->prepare("INSERT INTO events(uid,date,daemon,event) 
 
 # payu
 $payu_get->execute;
-while(my($login,$trans_id,$trans_amount, $trans_desc2, $trans_pay_type, $date) = $payu_get->fetchrow_array) {
+while(my($login,$trans_id,$trans_amount, $trans_desc2, $trans_pay_type, $date, $date_epoch) = $payu_get->fetchrow_array) {
 	#next unless $login eq 'ahes';
 	print $login."\n";
 	
@@ -58,18 +58,30 @@ while(my($login,$trans_id,$trans_amount, $trans_desc2, $trans_pay_type, $date) =
 	}
 
 	# check if user exists
-	$uid_check->execute($login);
-	if(!$uid_check->rows) {
+	$uid_get->execute($login);
+	if(!$uid_get->rows) {
 		# adduser
 		# we need to add user
 		print "we need to add user";
 	}
 
 	my($subject,$body);
-	may($id,$uid,$mail,$lang,$valid,$block,$del) = @{$uid_check->fetchrow_arrayref};
+	my($id,$uid,$mail,$lang,$valid_epoch,$block,$del) = @{$uid_get->fetchrow_arrayref};
 
-	# calculate new expire date
-	$valid = DateTime->from_epoch(epoch=>$valid)->add(months=>$period, days=>1)->ymd;
+	# calculate new expire date	
+	my $start_date;
+	my $dt1 = DateTime->from_epoch(epoch=>$valid_epoch);
+	my $dt2 = DateTime->now;
+	my $sub = $dt2->subtract_datetime($dt1);
+	
+	if($sub->in_units('months') > 0) {
+		# greater than 1 month	
+		$start_date = $date_epoch; # start date = payment date
+	} else {
+		$start_date = $valid_epoch; # start date = valid date
+	}
+
+	my $valid = DateTime->from_epoch(epoch=>$start_date)->add(months=>$period, days=>1)->ymd;	
 
 	if($block and $del) {
 		# undel
