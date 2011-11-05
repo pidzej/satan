@@ -24,7 +24,7 @@ my $payment_add   = $dbh_system->prepare("INSERT INTO payments(uid,trans_id,date
 my $payment_check = $dbh_system->prepare("SELECT trans_id FROM payments WHERE trans_id=?");
 
 my $uid_get    = $dbh_system->prepare("SELECT id,uid,mail,lang,UNIX_TIMESTAMP(valid),block,del FROM users LEFT JOIN uids USING(id) WHERE login=?");
-my $uid_update = $dbh_system->prepare("UPDATE uids SET block=0, del=0, valid=? WHERE uid=?");
+my $uid_update = $dbh_system->prepare("UPDATE uids SET block=0, del=0, shell=IF(shell='/bin/blocked','/bin/bash',shell), valid=? WHERE uid=?");
 
 my $user_update = $dbh_system->prepare("UPDATE users SET discount=0 WHERE id=?");
 
