@@ -333,27 +333,32 @@ sub pay {
 	}
 
 
-	print $client "\n\033[1;32mPayment period (incl. $vat% VAT)\033[0m\n\n"
-	            . " (Y)ear     ".$amount->{total}->{year}."\n"
-	            . " (Q)uarter  ".$amount->{total}->{quarter}."\n\n";
+	$client and print $client "\n\033[1;32mPayment period (incl. $vat% VAT)\033[0m\n\n"
+	                        . " (Y)ear     ".$amount->{total}->{year}."\n"
+	                        . " (Q)uarter  ".$amount->{total}->{quarter}."\n\n";
 	
 	my $period;
-	while(1) {
-		print $client "(INT) \033[1;33mChoose year or quarter\033[0m [Y/q] \n";
-		my $answer = <$client>;
-		if($answer =~ /^(y|)$/i) {
-			$period = 'year';
-			last;
-		} elsif($answer =~ /^q$/i) {
-			$period = 'quarter';
-			last;
+	if($client) {
+		# interactive
+		while(1) {
+			print $client "(INT) \033[1;33mChoose year or quarter\033[0m [Y/q] \n";
+			my $answer = <$client>;
+			if($answer =~ /^(y|)$/i) {
+				$period = 'year';
+				last;
+			} elsif($answer =~ /^q$/i) {
+				$period = 'quarter';
+				last;
+			}
 		}
+		print $client ucfirst $period.".\n\n";
+	} else {
+		$period = 'year';
 	}
-	print $client ucfirst $period.".\n\n";
 	
 	my $authcode = join('',map { ('a'..'z',0..9)[rand 36] } 1..16);
-	
 	$amount->{$period} =~ s/\.//;
+
 	$pay_user_add->execute(
 		$authcode,
 		$login,
@@ -364,8 +369,12 @@ sub pay {
 		$user->{mail}, 
 		$user->{lang}
 	);
-	
-	return "Payment URL is \033[1;34mhttps://rootnode.net/pay/".$authcode."\033[0m\n";
+
+	if($client) {
+		return "Payment URL is \033[1;34mhttps://rootnode.net/pay/".$authcode."\033[0m\n";
+	} else {
+		return "https://rootnode.net/pay/$authcode";
+	}	
 }
 	
 sub help {
