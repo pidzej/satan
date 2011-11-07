@@ -34,8 +34,7 @@ my $event_add = $dbh_system->prepare("INSERT INTO events(uid,date,daemon,event) 
 $payu_get->execute;
 while(my($login,$trans_id,$trans_amount, $trans_desc2, $trans_pay_type, $date, $date_epoch) = $payu_get->fetchrow_array) {
 	#next unless $login eq 'ahes';
-	print $login."\n";
-	
+
 	# add dot to price
 	my $amount = $trans_amount;
 	   $amount =~ s/(\d\d)$/\.$1/;
@@ -89,7 +88,6 @@ while(my($login,$trans_id,$trans_amount, $trans_desc2, $trans_pay_type, $date, $
 		next;
 	} else {
 		# prolong
-		print "prolong\n";
 		if(lc $lang eq 'pl') {
 			$subject = "Rootnode - płatność zaakceptowana ($login)";
 			$body = "Otrzymaliśmy twoją opłatę w wysokości ${amount}zł za konto '${login}' na Rootnode.\n"
@@ -129,3 +127,8 @@ while(my($login,$trans_id,$trans_amount, $trans_desc2, $trans_pay_type, $date, $
 }
 $dbh_system->commit;
 $dbh_pay->commit;
+
+# reload passwd
+if($payu_get->rows) {
+	system("/usr/local/sbin/passwd.pl");
+}
