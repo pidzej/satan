@@ -8,6 +8,7 @@
 
 package Satan::Account;
 
+use Satan::Invoice;
 use Satan::Tools qw(caps);
 use IO::Socket;
 use DBI;
@@ -34,10 +35,12 @@ sub new {
 
 	$self->{account_update_user}   = $dbh_system->prepare("UPDATE users SET firstname=?,lastname=?,lang=?,type=?,vat=?,phone=?,mail=?,company=?,
 	                                                                        address=?,postcode=?,city=?,country=? WHERE id=?");
-	$self->{event_add}             = $dbh_system->prepare("INSERT INTO events(uid,date,daemon,event,previous,current) VALUES(?,NOW(),'account',?,?,?)");
-		
+	$self->{invoice_get}           = $dbh_system->prepare("SELECT payment_id FROM invoice WHERE uid=? AND id=?");
+	$self->{invoice_get_all}       = $dbh_system->prepare("SELECT id,date,price_net,CONCAT(tax_rate,'%') AS tax_rate,price_gross,currency FROM invoice WHERE uid=? ORDER BY id DESC"); 
+	$self->{event_add}             = $dbh_system->prepare("INSERT INTO events(uid,date,daemon,event,previous,current) VALUES(?,NOW(),'account',?,?,?)");	
+	
 	$self->{pay_user_add}          = $dbh_pay->prepare("REPLACE INTO user(id,login,amount,period,first_name,last_name,mail,lang) VALUES(?,?,?,?,?,?,?,?)");
-        
+	
 	bless $self, $class;
 	return $self;
 }
@@ -376,17 +379,58 @@ sub pay {
 		return "https://rootnode.net/pay/$authcode";
 	}	
 }
+
+sub invoice {
+        my($self,@args) = @_;
+        my $uid    = $self->{uid};
+        my $login  = $self->{login};
+        my $client = $self->{client};
 	
+	my $invoice_get     = $self->{invoice_get};	
+	my $invoice_get_all = $self->{invoice_get_all};
+	
+	if(@args) {
+		foreach my $invoice_id (@args) {
+			$invoice_get->execute($uid,$invoice_id);
+			if(!$invoice_get->rows) {
+				print $client "Sorry, no such invoice: $invoice_id\n";
+				next;
+			}
+			my($payment_id) = $invoice_get->fetchrow_array;
+			my $invoice = Satan::Invoice->new(dbh_system=>$self->{dbh_system}, payment_id=>$payment_id);
+			   $invoice->create;
+			my $status = $invoice->send;
+			if($status) {
+				print $client "Invoice \033[1m$invoice_id\033[0m sent successfully.\n";
+			} else {
+				print $client "Error occured. Invoice $invoice_id could not be sent\n";
+			}
+		}
+	} else {
+		$invoice_get_all->execute($uid);
+		my $listing = Satan::Tools->listing(
+			db      => $invoice_get_all,
+			title   => "Invoices",
+			header  => ['Id','Raised at','Price','Tax','Total','Currency'],
+			columns => [ qw(id date price_net tax_rate price_gross currency) ],
+		) || "No invoices.";
+	}
+}	
+
+
 sub help {
 	my $self  = shift;
 	my $usage = "\033[1mSatan :: Account\033[0m\n\n"
                   . "\033[1;32mSYNTAX\033[0m\n"
                   . "  account show                 show user information (default)\n"
                   . "  account edit                 edit personal data\n"
-                  . "  account pay                  generate payment link\n\n"
+                  . "  account pay                  generate payment link\n"
+	          . "  account invoice              show invoices\n"
+	          . "  account invoice <id>         send pointed invoice by mail\n\n"
                   . "\033[1;32mEXAMPLE\033[0m\n"
                   . "  satan account\n"
-                  . "  satan account edit\n";
+                  . "  satan account edit\n"
+	          . "  satan invoice 201100305\n";
         return $usage;
 }
 
