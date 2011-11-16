@@ -233,7 +233,7 @@ sub send {
 		body   => $body,
 		type   => 'invoice',
 		parts  => ['original'],
-		emails => [ 'marcin@rotnode.net', $user->{mail} ],
+		emails => [ 'marcin@rootnode.net', $user->{mail} ],
 		with_accounts_info => 0
 	};	
 

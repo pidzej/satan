@@ -32,6 +32,7 @@ use IO::Socket;
 use DBI;
 use Data::Dumper;
 use FindBin qw($Bin);
+use lib $Bin;
 use feature 'switch';
 use warnings;
 use strict;
@@ -160,10 +161,11 @@ while(my $client = $socket->accept()) {
 					   $command = 'help' if grep(/^(help|\?)$/,@args);
 			
 					given($command) {
-						when('show') { $return = $account->show(@args) }
-						when('edit') { $return = $account->edit(@args) }
-						when('pay')  { $return = $account->pay(@args)  }
-						when('help') { $return = $account->help(@args) }
+						when('show')    { $return = $account->show(@args)    }
+						when('edit')    { $return = $account->edit(@args)    }
+						when('pay')     { $return = $account->pay(@args)     }
+						when('invoice') { $return = $account->invoice(@args) }
+						when('help')    { $return = $account->help(@args)    }
 						default {
 							print $client "Command '$command' is not available. Available commands are: show, edit, pay.\n";
 							print $client "See 'satan account help' or http://rootnode.net/satan/account for details.\n";
@@ -237,7 +239,7 @@ while(my $client = $socket->accept()) {
 					print $client $usage;
 				}
 				default {
-					print $client "Available satan serices: ftp backup\n";
+					print $client "Available satan serices: account backup ftp vpn\n";
 				}
 			}
 			print $client $return."\n" if $return;
