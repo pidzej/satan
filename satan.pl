@@ -186,6 +186,8 @@ while(my $client = $socket->accept()) {
 					my $command = shift @args || 'list';
 					   $command = 'help' if grep(/^(help|\?)$/,@args);
 
+					print $client "Backup command is disabled. Backup of all files and databases is performed globally.";
+=disabled
 					given($command) {
 						when ('add')                 { $return = $backup->add(@args)        }
 						when ('del')                 { $return = $backup->del(@args)        }
@@ -197,6 +199,7 @@ while(my $client = $socket->accept()) {
 							print $client "See 'satan backup help' or http://rootnode.net/satan/backup for details.\n";
 						}
 					}
+=cut
 			
 				}				
 				
