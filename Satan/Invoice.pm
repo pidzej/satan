@@ -32,7 +32,7 @@ sub new {
 	my $self = { @_	};
 
 	my $config_file = "../config/invoice.yaml";
-	-f $config_file or die "Config file not found!\n";
+	-f $config_file or die "Config file $config_file not found!\n";
 	my $config = YAML::LoadFile($config_file);
 
 	$self->{rest} = REST::Client->new();
