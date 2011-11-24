@@ -43,7 +43,7 @@ $payu_fix->execute('quarter',4649);
 # payu
 $payu_get->execute;
 while(my($login,$trans_id,$trans_amount, $trans_desc2, $trans_pay_type, $date, $date_epoch) = $payu_get->fetchrow_array) {
-	print $login."\n";
+#	print $login."\n";
 #	next unless $login eq 'ahes';
 
 	# add dot to price
