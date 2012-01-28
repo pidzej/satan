@@ -25,9 +25,8 @@ $dbh_system->{mysql_enable_utf8}    = 1;
 $dbh_pay->{mysql_auto_reconnect} = 1;
 $dbh_pay->{mysql_enable_utf8}    = 1;
 
-my $payu_get  = $dbh_pay->prepare("SELECT login, trans_id, trans_amount, trans_desc2, trans_pay_type, DATE(trans_create), UNIX_TIMESTAMP(trans_create) FROM payu WHERE trans_status=99 AND trans_pay_type != 't' AND done=0");
+my $payu_get  = $dbh_pay->prepare("SELECT login, trans_id, trans_amount, trans_desc2, trans_pay_type, DATE(trans_create), UNIX_TIMESTAMP(trans_create) FROM payu WHERE trans_status=99 AND done=0");
 my $payu_done = $dbh_pay->prepare("UPDATE payu SET done=1 WHERE trans_id=?");
-my $payu_fix  = $dbh_pay->prepare("UPDATE payu SET trans_desc2=? WHERE trans_amount=? AND trans_desc2='' AND trans_status=99");
 
 my $payment_add  = $dbh_system->prepare("INSERT INTO payments(uid,trans_id,date,type,bank,amount,currency) VALUES (?,?,?,?,?,?,?)");
 my $payment_get  = $dbh_system->prepare("SELECT id FROM payments WHERE trans_id=?");
@@ -35,10 +34,6 @@ my $user_get     = $dbh_system->prepare("SELECT id,uid,mail,lang,UNIX_TIMESTAMP(
 my $uid_update   = $dbh_system->prepare("UPDATE uids SET block=0, del=0, shell=IF(shell='/bin/blocked','/bin/bash',shell), valid=? WHERE uid=?");
 my $user_update  = $dbh_system->prepare("UPDATE users SET discount=0 WHERE id=?");
 my $event_add    = $dbh_system->prepare("INSERT INTO events(uid,date,daemon,event) VALUES(?,NOW(),'adduser',?)");
-
-# fix
-$payu_fix->execute('year',15498);
-$payu_fix->execute('quarter',4649);
 
 # payu
 $payu_get->execute;

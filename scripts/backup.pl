@@ -6,6 +6,8 @@
 # Copyright (C) 2009-2011 Marcin Hlybin
 # All rights reserved.
 
+# THIS FILE IS DEPRECATED!
+
 use warnings;
 use strict;
 use DBI;
