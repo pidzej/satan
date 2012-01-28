@@ -15,7 +15,6 @@ use POSIX;
 use Data::Dumper;
 use Net::Domain qw(hostname);
 use File::Path qw(make_path);
-use FindBin qw($Bin);
 use feature 'switch';
 use utf8;
 use warnings;
@@ -32,8 +31,8 @@ sub new {
 	my $class = shift;
 	my $self = { @_	};
 
-	my $config_file = "$Bin/config/invoice.yaml";
-	-f $config_file or die "Config file not found!\n";
+	my $config_file = "../config/invoice.yaml";
+	-f $config_file or die "Config file $config_file not found!\n";
 	my $config = YAML::LoadFile($config_file);
 
 	$self->{rest} = REST::Client->new();
@@ -234,7 +233,7 @@ sub send {
 		body   => $body,
 		type   => 'invoice',
 		parts  => ['original'],
-		emails => [ 'marcin@rotnode.net', $user->{mail} ],
+		emails => [ 'marcin@rootnode.net', $user->{mail} ],
 		with_accounts_info => 0
 	};	
 

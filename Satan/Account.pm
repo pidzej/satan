@@ -340,7 +340,7 @@ sub pay {
 	                        . " (Y)ear     ".$amount->{total}->{year}."\n"
 	                        . " (Q)uarter  ".$amount->{total}->{quarter}."\n\n";
 	
-	my $period = 'year';
+	my $period;
 	if($client) {
 		# interactive
 		while(1) {
@@ -355,6 +355,8 @@ sub pay {
 			}
 		}
 		print $client ucfirst $period.".\n\n";
+	} else {
+		$period = 'year';
 	}
 	
 	my $authcode = join('',map { ('a'..'z',0..9)[rand 36] } 1..16);
