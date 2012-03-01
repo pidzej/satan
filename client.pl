@@ -1,50 +1,43 @@
-#!/usr/bin/perl
-
-## Satan client
+#!/usr/bin/perl -l
+#
+# Satan (client)
+# Shell account service manager
 # Rootnode http://rootnode.net
 #
-# Copyright (C) 2009-2011 Marcin Hlybin
+# Copyright (C) 2009-2012 Marcin Hlybin
 # All rights reserved.
-
+#
 use strict;
+use warnings;
+use JSON::XS;
 use IO::Socket;
-use Encode;
-use FindBin qw($Bin);
-use utf8;
-$|++;
+use Data::Dumper;
 
-$SIG{INT} = 'IGNORE';
-my $sock = new IO::Socket::UNIX (
-				Peer => "$Bin/satan.sock",
-                                Type => SOCK_STREAM,
-				Timeout => 10, 
-                                );
-die "Could not connect to Satan: $!\n" unless $sock;
-binmode(STDOUT,':utf8');
-binmode(STDIN,':utf8');
-binmode($sock, ':utf8');
+my $json = JSON::XS->new->utf8;
+my $s_client = new IO::Socket::INET ( 
+	PeerAddr => '127.0.0.1',
+	PeerPort => 1600, 
+	Timeout  => 1,
+) or die "Cannot connect to Satan! $!.\n";
 
-my $args = join(' ',$ENV{PWD},@ARGV);
-print $sock $args."\n";
-#my $interactive;
-while(<$sock>) {
-	chomp;
-	my $response = $_;
-	if($response =~ /^\((INT|PASS)\)\s(.*)$/) {
-		print $2;
-		my $input;
-		if($1 eq 'PASS') {
-			system 'stty -echo';
-			$input = <STDIN>;
-			system 'stty echo';
-			print "\n";
-		} else {
-			$input = <STDIN>;
-		}
-		print $sock $input;
+open(my $fh,'<','/home/satan.key') or die "Cannot find user credentials";
+my @cred = split(/\s/, <$fh>);
+
+sub req {
+	print $s_client $json->encode(shift);
+	my $r = $json->decode(scalar <$s_client>);	
+	if($r->{status} == 0) {
+		# success
+		print $r->{data} if $r->{data};
 	} else {
-		print $response."\n";
+		# failure
+		print $r->{message};
 	}
-}	
+	return;
+}
 
-close($sock);
+# authenticate
+req(\@cred); 
+
+# send request
+req(\@ARGV); 

@@ -44,7 +44,7 @@ $|++;
 $SIG{CHLD} = 'IGNORE'; # braaaaains!!!
 
 my $json = JSON::XS->new->utf8;
-my $agent = YAML::LoadFile('agent.yaml');
+my $agent = YAML::LoadFile('config/agent.yaml');
 
 my $satan_services = join(q[ ], sort keys %$agent);
 Readonly my $USAGE => <<"END_USAGE";
