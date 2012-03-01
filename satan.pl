@@ -1,10 +1,10 @@
-#!/usr/bin/perl
-
-## Satan 
+#!/usr/bin/perl -l
+#
+# Satan (server)
 # Shell account service manager
 # Rootnode http://rootnode.net
 #
-# Copyright (C) 2009-2011 Marcin Hlybin
+# Copyright (C) 2009-2012 Marcin Hlybin
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -27,24 +27,37 @@
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
 # SUCH DAMAGE.
-
+#
 use IO::Socket;
 use DBI;
 use Data::Dumper;
+use JSON::XS;
+use YAML qw(LoadFile);
 use FindBin qw($Bin);
+use Readonly;
 use lib $Bin;
 use feature 'switch';
 use warnings;
 use strict;
-use utf8;
-
-use Satan::FTP;
-use Satan::Backup;
-use Satan::Account;
-use Satan::VPN;
 
 $|++;
-$SIG{CHLD} = 'IGNORE'; # don't wait for retarded kids
+$SIG{CHLD} = 'IGNORE'; # braaaaains!!!
+
+my $json = JSON::XS->new->utf8;
+my $agent = YAML::LoadFile('agent.yaml');
+
+my $satan_services = join(q[ ], sort keys %$agent);
+Readonly my $USAGE => <<"END_USAGE";
+\033[1mSatan - the most hellish service manager\033[0m
+Usage: satan [SERVICE] [TASK] [ARGS]
+
+Available services: \033[1;32m$satan_services\033[0m
+Type help at the end of each command to see detailed description, e.g.:
+\033[1;34m\$ satan dns help\033[0m
+
+For additional information visit http://rootnode.net
+Bug reporting on mailing list.
+END_USAGE
 
 unless (@ARGV) {
 	open STDOUT,">>","$Bin/access.log";
@@ -52,207 +65,115 @@ unless (@ARGV) {
 	chmod 0600,"$Bin/access.log";
 	chmod 0600,"$Bin/error.log";
 }
-my $sockfile = "$Bin/satan.sock";
-`rm -f -- $Bin/lock/*`;
-unlink $sockfile;
 
-my $socket = new IO::Socket::UNIX (
-        Local => $sockfile,
-        Type => SOCK_STREAM,
-        Listen => 10,
-        Reuse => 1,
-);
-die "Could not create UNIX socket: $!\n" unless $socket;
-chmod 0666, $sockfile;
-binmode( $socket, ':utf8' );
+my $s_server = new IO::Socket::INET (
+        LocalAddr => '0.0.0.0',
+        LocalPort => 1600,
+        Proto     => 'tcp',
+        Listen    => 100,
+        ReuseAddr => 1,
+) or die "Cannot create socket! $!\n";
 
-## dbi 
-my $dbh_system = DBI->connect("dbi:mysql:rootnode;mysql_read_default_file=/root/.my.system.cnf",undef,undef,{ RaiseError => 0, AutoCommit => 1 });
-my $dbh_pay    = DBI->connect("dbi:mysql:my6667_pay:mysql_read_default_file=/root/.my.pay.cnf",undef,undef,{ RaiseError => 0, AutoCommit=>1 });
+# connect to db
+my $dbh = DBI->connect("dbi:mysql:satan;mysql_read_default_file=/root/.my.cnf",undef,undef,{ RaiseError => 1, AutoCommit => 1 });
+$dbh->{mysql_auto_reconnect} = 1;
+$dbh->{mysql_enable_utf8}    = 1;
 
-$dbh_system->{mysql_auto_reconnect} = 1;
-$dbh_system->{mysql_enable_utf8}    = 1;
-$dbh_pay->{mysql_auto_reconnect}    = 1;
-$dbh_pay->{mysql_enable_utf8}       = 1;
+# db statements
+my $db;
+$db->{is_auth} = $dbh->prepare("SELECT uid FROM auth WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
 
-## main 
-while(my $client = $socket->accept()) {
-        binmode( $client, ':utf8' );
-        setsockopt $client, SOL_SOCKET, SO_PASSCRED, 1;
-        my($pid,$uid,$gid) = unpack "iii", $client->sockopt(SO_PEERCRED);
-	my $now = localtime(time);
-        if(not defined $uid) {
-                print "[$now] WARNING: UID not defined!\n";
-                close($client);
-                next;
-        }
-	if($uid < 2000 or $uid >= 65000) {
-		print "[$now] WARNING: UID $uid is not allowed to use Satan!\n";
-		close($client);
-		next;
-	}
+while(my $s_client = $s_server->accept()) {
+	$s_client->autoflush(1);
         if(fork() == 0) {
-                if(-f "$Bin/lock/$uid" and $uid) {
-			print "[$now] Connection refused: too many sessions for user $uid.\n";
-                        print $client "Only one session is allowed. Dying.\n";
-                        close($client);
-                        exit 0;
-                } else {
-                        open LOCK,">","$Bin/lock/$uid";
-                        close LOCK;
-                }
-                $client->autoflush(1);
-                my $login = getpwuid($uid);
-                if(not defined $login) {
-			print "[$now] ERROR: No login name for user $uid!\n";
-                        print $client "Where is your login name?\n";
-                        close($client);
-                        next;
-                }
-
-                while(<$client>) {
-                        chomp;
-                        my @args = split(/\s/,$_);
-			my $pwd    = shift @args;
-			my $daemon = shift @args || 'help';
-			my @params = ($uid,$login,$client,@args);
-			my $now = localtime(time);
-                        print "[$now] Connection: $login ($uid), Request: $daemon(".join(' ',@args).")\n";
-			my $return;
-			given($daemon) {
-				## Satan::FTP
-				when ("ftp") { 
-					my $ftp = Satan::FTP->new(
-						login      => $login,
-						uid        => $uid,
-						client     => $client,
-						dbh_system => $dbh_system
-					);
-					
-					## commands
-					my $command = shift @args || 'list';
-					   $command = 'help' if grep(/^(help|\?)$/,@args);
-
-					given($command) {
-						when ('add')               { $return = $ftp->add(@args)    }
-						when ('del')               { $return = $ftp->del(@args)    }
-						when ('list')              { $return = $ftp->list(@args)   }
-						when (/^(change|modify)$/) { $return = $ftp->modify(@args) }
-						when ('help')              { $return = $ftp->help(@args)   }
-						default {
-							print $client "Command '$command' is not available. Available commands are: add, del, change, list.\n";
-							print $client "See 'satan ftp help' or http://rootnode.net/satan/ftp for details.\n";
-						}
-					}				
+		my($c, $a, @in);
+		my($err,$msg,$data) = (0, q[OK], q[]);
+                while(<$s_client>) {
+			chomp; /^$/ and next;
+			{{
+				# data type
+				if(/^\[.*\]$/) { 
+					$c->{is_json}++;
+					eval { @in = @{$json->decode($_)} } or do {
+					       ($err, $msg) = (666, 'Cannot parse JSON');	
+					};
+				} else { 
+					@in = split(/\s/);
 				}
-			
-				## Satan::Account
-				when ('account') {
-					my $account = Satan::Account->new(
-						login      => $login,
-						uid        => $uid,
-						client     => $client,
-						dbh_system => $dbh_system,
-						dbh_pay    => $dbh_pay
-					);
 
-					## commands
-					my $command = shift @args || 'show';
-					   $command = 'help' if grep(/^(help|\?)$/,@args);
-			
-					given($command) {
-						when('show')    { $return = $account->show(@args)    }
-						when('edit')    { $return = $account->edit(@args)    }
-						when('pay')     { $return = $account->pay(@args)     }
-						when('invoice') { $return = $account->invoice(@args) }
-						when('help')    { $return = $account->help(@args)    }
-						default {
-							print $client "Command '$command' is not available. Available commands are: show, edit, pay.\n";
-							print $client "See 'satan account help' or http://rootnode.net/satan/account for details.\n";
-						}
+				# client authentication
+				if(! $c->{is_auth}) {
+					($c->{uid}, $c->{key}) = @in;
+					my $is_auth = $db->{is_auth};
+					   $is_auth->execute($c->{uid}, $c->{key});
+					   $is_auth = $is_auth->rows;
+					if($is_auth) {
+						$c->{is_auth}++;
+					} else {
+						($err,$msg) = (1, 'User not authenticated');					
 					}
+					last;
 				}
-			
-				## Satan::Backup
-				when ('backup') {
-					my $backup = Satan::Backup->new(
-						login      => $login,
-						uid        => $uid,
-						pwd        => $pwd,
-						dbh_system => $dbh_system
-					);
-			
-					## commands
-					my $command = shift @args || 'list';
-					   $command = 'help' if grep(/^(help|\?)$/,@args);
 
-					print $client "Backup command is disabled. Backup of all files and databases is performed globally.";
-=disabled
-					given($command) {
-						when ('add')                 { $return = $backup->add(@args)        }
-						when ('del')                 { $return = $backup->del(@args)        }
-						when (/^(include|exclude)$/) { $return = $backup->include($1,@args) }
-						when ('list')                { $return = $backup->list(@args)       }
-						when ('help')                { $return = $backup->help(@args)       }
-						default {
-							print $client "Command '$command' is not available. Available commands are: add, del, include, exclude, list.\n";
-							print $client "See 'satan backup help' or http://rootnode.net/satan/backup for details.\n";
-						}
-					}
-=cut
-			
-				}				
+				# get service name
+				my $sub = shift @in || 'help';
+				unshift @in, $c->{uid};
 				
-				## Satan::VPN
-				when ('vpn') {
-					my $vpn = Satan::VPN->new(
-						login      => $login,
-						uid        => $uid,
-						client     => $client,
-						dbh_system => $dbh_system
-					);
-
-					## commands
-					my $command = shift @args || 'list';
-					   $command = 'help' if grep(/^(help|\?)$/,@args);
-
-					given($command) {
-						when('add')    { $return = $vpn->add(@args) }
-						when('del')    { $return = $vpn->del(@args) }
-						when('list')   { $return = $vpn->list(@args) }
-						when('config') { $return = $vpn->config(@args) }
-						when('help')   { $return = $vpn->help(@args) } 
-						default {
-							print $client "Command '$command' is not available. Available command are: add, del, list, config.\n";
-							print $client "See 'satan vpn help' or http://rootnode.net/satan/vpn for details.\n";
-						}
-					}
+				# display usage
+				if($sub eq 'help') {
+					($err, $msg) = (1, $USAGE);
+					last;
 				}
+				
+				$a = $agent->{$sub};
+				if(!$a) {
+					($err, $msg) = (1, "Service \033[1m$sub\033[0m NOT found. Available services are: \033[1;32m".join(q[ ], sort keys %$agent)."\033[0m");
+					last;
+				}	
+				
+				# connect to agent
+				my $s_agent = new IO::Socket::INET (
+					PeerAddr  => '127.0.0.1',
+					PeerPort  => $a->{port},
+					Proto     => 'tcp',
+					Timeout   => 1,
+					ReuseAddr => 0
+				);
 
-				## Help
-				when ("help") {
-					my $usage  = "\033[1mSatan, the most hellish service manager\033[0m\n"
-					           . "Usage: satan [SERVICE] [TASK] [ARGS]\n\n"
-                                                   . "Available services: \033[1;32mmysql pgsql ftp domain vhost dns mail backup account vpn\033[0m\n"
-					           . "Type help at the end of each command to see detailed description, e.g.:\n"
-					           . "\033[1;34m\$ satan mysql help\033[0m\n\n"
-					           . "For additional information, see http://rootnode.net\n"
-					           . "Bug reporting on mailing list.\n\n";
-					          #. "Bash completion is supported. Press TAB twice.\n";
-					print $client $usage;
+				# send data to agent
+				print $s_agent $json->encode(\@in);
+				while(<$s_agent>) {
+					chomp;
+					$a->{is_connected}++;
+					$a->{response} = $_;
+					last;
 				}
-				default {
-					print $client "Available satan serices: account backup ftp vpn\n";
+				close($s_agent);
+
+				# agent not responding
+				if(! $a->{is_connected}) {
+					($err,$msg) = (666, "Service \033[1m$sub\033[0m is currently NOT available. Sorry about that.\nPlease try again later.");					
+					last;
 				}
-			}
-			print $client $return."\n" if $return;
-			last;
-                }
-                close($client);
-                unlink "$Bin/lock/$uid";
+						
+			}}
+			my $response = $a->{response} ? $a->{response} : $json->encode({ status => $err, message => $msg, data => $data });
+			print $s_client $response;
+			last if $err;
+		} # while $s_client
+		close($s_client);
 		exit;
-        }
+	}
 }
-close($socket);
+
+close($s_server);
 close STDOUT;
 close STDERR;
+
+=schema
+DROP TABLE IF EXISTS auth;
+CREATE TABLE auth (
+	uid SMALLINT UNSIGNED NOT NULL,
+	auth_key CHAR(41) NOT NULL,
+	PRIMARY KEY(uid)
+) ENGINE=InnoDB, CHARACTER SET=UTF8;

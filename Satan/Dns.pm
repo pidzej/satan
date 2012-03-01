@@ -1,12 +1,12 @@
 #!/usr/bin/perl
-
-## Satan::DNS
+#
+# Satan::DNS
 # Rootnode http://rootnode.net
 #
-# Copyright (C) 2009-2011 Marcin Hlybin
+# Copyright (C) 2009-2012 Marcin Hlybin
 # All rights reserved.
-
-package Satan::DNS;
+#
+package Satan::Dns;
 
 use Satan::Tools qw(caps);
 use IO::Socket;
@@ -18,7 +18,6 @@ use feature 'switch';
 use utf8;
 use warnings;
 use strict;
-
 use Data::Validate::Domain qw(is_domain is_hostname);
 use Data::Validate::IP qw(is_ipv4 is_ipv6);
 
@@ -38,16 +37,16 @@ $SIG{CHLD} = 'IGNORE';
 sub new {
 	my $class = shift;
 	my $self = { @_	};
-	my $dbh_system = $self->{dbh_system};
+	my $dbh = DBI->connect("dbi:mysql:pdns;mysql_read_default_file=/root/.my.cnf",undef,undef,{ RaiseError => 0, AutoCommit => 1 });
 
-	$self->{dns_add_domain}      = $dbh_system->prepare("INSERT INTO domains(uid,name,type) VALUES(?,?,?)");
-	$self->{dns_add_record}      = $dbh_system->prepare("INSERT INTO records(domain_id,name,type,content,ttl,prio,change_date) VALUES (?,?,?,?,?,?,UNIX_TIMESTAMP(NOW()))");
-	$self->{dns_check_domain}    = $dbh_system->prepare("SELECT id,uid FROM domains WHERE name=?");
-	$self->{dns_check_record}    = $dbh_system->prepare("SELECT id FROM records WHERE domain_id=? AND name=? AND type=? AND content=?");
-	$self->{dns_check_record_id} = $dbh_system->prepare("SELECT r.id FROM records r INNER JOIN domains d ON r.domain_id = d.id WHERE r.id=? AND d.uid=?");   
-	$self->{dns_del_domain}      = $dbh_system->prepare("DELETE FROM domains WHERE id=? AND uid=?");
-	$self->{dns_del_record}      = $dbh_system->prepare("DELETE FROM records WHERE id=?");
-	$self->{dns_list_domains}    = $dbh_system->prepare("
+	$self->{dns_add_domain}      = $dbh->prepare("INSERT INTO domains(uid,name,type) VALUES(?,?,?)");
+	$self->{dns_add_record}      = $dbh->prepare("INSERT INTO records(domain_id,name,type,content,ttl,prio,change_date) VALUES (?,?,?,?,?,?,UNIX_TIMESTAMP(NOW()))");
+	$self->{dns_check_domain}    = $dbh->prepare("SELECT id,uid FROM domains WHERE name=?");
+	$self->{dns_check_record}    = $dbh->prepare("SELECT id FROM records WHERE domain_id=? AND name=? AND type=? AND content=?");
+	$self->{dns_check_record_id} = $dbh->prepare("SELECT r.id FROM records r INNER JOIN domains d ON r.domain_id = d.id WHERE r.id=? AND d.uid=?");   
+	$self->{dns_del_domain}      = $dbh->prepare("DELETE FROM domains WHERE id=? AND uid=?");
+	$self->{dns_del_record}      = $dbh->prepare("DELETE FROM records WHERE id=?");
+	$self->{dns_list_domains}    = $dbh->prepare("
 		SELECT 
 			name,
 			SUM(CASE type WHEN 'SOA'         THEN count ELSE 0 END) AS SOA,
@@ -65,10 +64,10 @@ sub new {
 			GROUP BY d.id,r.type
 		) AS stats GROUP by name;
 	");
-	$self->{dns_list_records}    = $dbh_system->prepare("SELECT id, name, type, content, ttl, prio FROM records WHERE domain_id=?");
+	$self->{dns_list_records}    = $dbh->prepare("SELECT id, name, type, content, ttl, prio FROM records WHERE domain_id=?");
 	
-	#$self->{dns_limit} = $dbh_system->prepare("SELECT dns FROM limits WHERE uid=?");
-	#$self->{event_add} = $dbh_system->prepare("INSERT INTO events(uid,date,daemon,event) VALUES(?,NOW(),'dns',?)");
+	#$self->{dns_limit} = $dbh->prepare("SELECT dns FROM limits WHERE uid=?");
+	#$self->{event_add} = $dbh->prepare("INSERT INTO events(uid,date,daemon,event) VALUES(?,NOW(),'dns',?)");
 	
 	bless $self, $class;
 	return $self;
@@ -77,8 +76,6 @@ sub new {
 sub add {
 	my($self,@args) = @_;
 	my $uid       = $self->{uid};
-	my $login     = $self->{login};
-	my $client    = $self->{client};
 
 	my $dns_add_domain   = $self->{dns_add_domain};
 	my $dns_add_record   = $self->{dns_add_record};
@@ -263,8 +260,6 @@ sub add {
 sub del {
 	my($self,@args) = @_;
         my $uid     = $self->{uid};
-        my $login   = $self->{login};
-        my $client  = $self->{client};
 	
 	my $dns_del_domain      = $self->{dns_del_domain};
 	my $dns_del_record      = $self->{dns_del_record};
@@ -310,8 +305,6 @@ sub del {
 sub list {
 	my($self,@args) = @_;
         my $uid     = $self->{uid};
-        my $login   = $self->{login};
-        my $client  = $self->{client};
 
 	my $dns_check_domain = $self->{dns_check_domain};
 	my $dns_list_domains = $self->{dns_list_domains};
@@ -344,7 +337,7 @@ sub list {
 					title   => "Domain $domain_name",
 					header  => ['ID','Name','Type','Content','TTL','Priority'],
 					columns => [ qw(id name type content ttl prio) ],
-				) || "No domains.";
+				) || "No records.";
 			} else {
 				return "Domain \033[1m$domain_name\033[0m is NOT your domain! Cannot list.";
 			}
@@ -352,10 +345,65 @@ sub list {
 			return "Domain \033[1m$domain_name\033[0m does NOT exist! Please double check the name.";
 		}
 	}
-	
-	return $listing;
+	$self->{listing} = $listing;	
+	return;
 }
 
+sub help {
+        my $self = shift;
+        my $uid = $self->{uid};
+	my $USAGE = <<"END_OF_USAGE";
+\033[1mSatan :: DNS\033[0m
+
+\033[1;32mSYNTAX\033[0m
+  dns add <domain>                                     add domain (basic records included)
+  dns add <domain> a     <host|@|.> <ip>               add A record
+  dns add <domain> aaaa  <host|@|.> <ipv6>             add AAAA record
+  dns add <domain> cname <host|@|.> <domain>           add CNAME record
+  dns add <domain> mx    <host|@|.> <domain> [<prio>]  add MX record
+  dns add <domain> txt   <host|@|.> "<txt>"            add TXT record
+  dns add <domain> srv   <host> <prio> <weight> <port> <domain>     
+                                                       add SRV record
+  dns add <domain> soa   <host|@|.> <ns> <mail>        add SOA record (or delegate a subdomain)
+  dns add <domain> ns    <host|@|.> <domain>           add NS record
+  dns add <domain> ptr   <host|@|.> <domain>           add PTR record             
+  dns del <domain>                                     delete domain and ALL RECORDS!
+  dne del <id>                                         delete record
+  dns list                                             list domains
+  dns list <domain>                                    list records
+  dns help                                             show help
+
+  \033[1mWhere:\033[0m
+    <domain> must be a canonical domain name
+
+    In <host> you can use:
+       \033[1m@\033[0m for a main domain entry
+       \033[1m.\033[0m for a wildcard entry (starting with *)
+
+    In SRV record <host> should be in format _service._proto,
+    e.g.: _xmpp-client._tcp
+
+    In TXT recond you must use quotes "".
+   
+\033[1;32mEXAMPLES\033[0m
+  satan dns add domain.com
+  satan dns list
+  satan dns add domain.com a @ 8.8.8.8    
+  satan dns add domain.com txt test "This is test text" 
+  satan dns add domain.com soa friend ns1.rootnode.net mail\@domain.com
+  satan dns list domain.com
+  satan dns del 12 
+  satan dns del domain.com
+END_OF_USAGE
+
+	$self->{listing} = $USAGE;
+	return;
+}
+
+sub get_data {
+	my $self = shift;
+	return $self->{listing} || '';
+}
 
 =mysql backend pdns
 

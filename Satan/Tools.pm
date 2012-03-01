@@ -12,6 +12,22 @@ use warnings;
 use strict;
 use Data::Dumper;
 
+sub sub_names {
+	my($self, $mod) = @_;
+	my $file = "Satan/$mod.pm";
+	my @names;
+	if(-f $file) {
+		open(FH, '<', $file);
+		while(<FH>) {
+			if(/^sub\s([a-z]+)\s{$/) {
+				my $sub_name = $1;
+				push @names, $sub_name if $sub_name ne 'new';
+			}
+		}
+	}
+	return @names;
+}
+
 sub caps {
 	## Split number/caps into bits
 	## Syntax
