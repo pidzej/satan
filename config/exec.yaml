@@ -1,0 +1,4 @@
+# Exec configuration
+vhost: 
+    add: create directories
+    del: change directory name

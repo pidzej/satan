@@ -15,25 +15,21 @@ use Data::Dumper;
 
 my $json = JSON::XS->new->utf8;
 my $s_client = new IO::Socket::INET ( 
-	PeerAddr => '127.0.0.1',
+	PeerAddr => '10.1.0.6',
 	PeerPort => 1600, 
 	Timeout  => 1,
-) or die "Cannot connect to Satan! $!.\n";
+) or die "Could not connect to Satan! $!.\n";
 
 open(my $fh,'<','/home/satan.key') or die "Cannot find user credentials";
 my @cred = split(/\s/, <$fh>);
+push @ARGV, 'help' unless @ARGV;
 
 sub req {
 	print $s_client $json->encode(shift);
 	my $r = $json->decode(scalar <$s_client>);	
-	if($r->{status} == 0) {
-		# success
-		print $r->{data} if $r->{data};
-	} else {
-		# failure
-		print $r->{message};
-	}
-	return;
+	print $r->{data}    if $r->{data};
+	print $r->{message} if $r->{message} ne 'OK';
+	exit  $r->{status}  if $r->{status};
 }
 
 # authenticate

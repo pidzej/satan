@@ -41,12 +41,13 @@ use warnings;
 use strict;
 
 $|++;
-$SIG{CHLD} = 'IGNORE'; # braaaaains!!!
+$SIG{CHLD} = 'IGNORE'; # braaaaains!!
 
-my $json = JSON::XS->new->utf8;
-my $agent = YAML::LoadFile('config/agent.yaml');
+my $json       = JSON::XS->new->utf8;
+my $agent_conf = YAML::LoadFile('config/agent.yaml');
+my $exec_conf  = YAML::LoadFile('config/exec.yaml');
 
-my $satan_services = join(q[ ], sort keys %$agent);
+my $satan_services = join(q[ ], sort keys %$agent_conf);
 Readonly my $USAGE => <<"END_USAGE";
 \033[1mSatan - the most hellish service manager\033[0m
 Usage: satan [SERVICE] [TASK] [ARGS]
@@ -81,86 +82,154 @@ $dbh->{mysql_enable_utf8}    = 1;
 
 # db statements
 my $db;
-$db->{is_auth} = $dbh->prepare("SELECT uid FROM auth WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
+$db->{get_credentials} = $dbh->prepare("SELECT user_name   FROM auth   WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
+$db->{get_server_name} = $dbh->prepare("SELECT server_name FROM server WHERE ip_address=?");  
 
 while(my $s_client = $s_server->accept()) {
 	$s_client->autoflush(1);
         if(fork() == 0) {
-		my($c, $a, @in);
-		my($err,$msg,$data) = (0, q[OK], q[]);
+		my ($client, $agent, $exec, @request, $response);
+		my ($status, $message) = (0, 'OK');
+
+		# client ip
+		$client->{ipaddr} = $s_client->peerhost;
+
+		# server name
+		$db->{get_server_name}->execute($client->{ipaddr});
+		$client->{server_name} = $db->{get_server_name}->fetchrow_array;
+
+		CLIENT:
                 while(<$s_client>) {
-			chomp; /^$/ and next;
-			{{
-				# data type
-				if(/^\[.*\]$/) { 
-					$c->{is_json}++;
-					eval { @in = @{$json->decode($_)} } or do {
-					       ($err, $msg) = (666, 'Cannot parse JSON');	
-					};
-				} else { 
-					@in = split(/\s/);
+			# skip empty lines
+			chomp; /^$/ and next CLIENT;
+			
+			if(/^\[.*\]$/) { 
+				# json input
+				eval { 	
+					$client->{request} = $json->decode($_);
+				} or do {
+					$response = { status => 400, message => 'Bad request. Cannot parse JSON' };
+					last CLIENT;
 				}
+			} 
+			else { 
+				# plain text input
+				$client->{request} = [ split(/\s/) ];
+			}
+			
+			# store request as array
+			@request = @{$client->{request}};
+			
+			# client authentication
+			if(! $client->{is_auth}) {
+				# get uid and key from request
+				($client->{uid}, $client->{key}) = @request;
 
-				# client authentication
-				if(! $c->{is_auth}) {
-					($c->{uid}, $c->{key}) = @in;
-					my $is_auth = $db->{is_auth};
-					   $is_auth->execute($c->{uid}, $c->{key});
-					   $is_auth = $is_auth->rows;
-					if($is_auth) {
-						$c->{is_auth}++;
-					} else {
-						($err,$msg) = (1, 'User not authenticated');					
-					}
-					last;
+				# check credentials against db
+				$db->{get_credentials}->execute($client->{uid}, $client->{key});
+				if($db->{get_credentials}->rows) {
+					# user is authenticated
+					$client->{is_auth} = 1;
+					delete $client->{key};
+			
+					# get user name
+					$client->{user_name} = $db->{get_credentials}->fetchrow_array;
+				} 
+				else {
+					$response = { status => 401, message => 'Unauthorized' };
+					last CLIENT;
 				}
+				$response = { status => 0, message => 'OK' };
+				print $s_client $json->encode($response);
+				next CLIENT;
+			}
+			
+			# get service name
+			my $service_name = shift @request || 'help';
+	
+			# get command name
+			my $command_name = $request[0] || '';
 
-				# get service name
-				my $sub = shift @in || 'help';
-				unshift @in, $c->{uid};
-				
-				# display usage
-				if($sub eq 'help') {
-					($err, $msg) = (1, $USAGE);
-					last;
-				}
-				
-				$a = $agent->{$sub};
-				if(!$a) {
-					($err, $msg) = (1, "Service \033[1m$sub\033[0m NOT found. Available services are: \033[1;32m".join(q[ ], sort keys %$agent)."\033[0m");
-					last;
-				}	
-				
-				# connect to agent
-				my $s_agent = new IO::Socket::INET (
-					PeerAddr  => '127.0.0.1',
-					PeerPort  => $a->{port},
-					Proto     => 'tcp',
-					Timeout   => 1,
-					ReuseAddr => 0
+			# push client info to request
+			unshift @request, $client;
+			
+			# display usage
+			if($service_name eq 'help') {
+				$response = { status => 404, message => $USAGE };
+				last CLIENT;
+			}
+		
+			# get agent configuration
+			$agent = $agent_conf->{$service_name};
+
+			# throw error if agent does not exist
+			if (!$agent) {
+				$response = { status => 405, message => "Service \033[1m$service_name\033[0m NOT found. Available services are: \033[1;32m$satan_services\033[0m" };
+				last CLIENT;
+			}
+			
+			# connect to agent
+			eval {
+				$agent->{sock} = worker_connect (
+					port => $agent->{port}
 				);
+			} 
+			or do {
+				$response = { status => 502, message => "Cannot connect to agent \033[1m$service_name\033[0m. System error." };
+				last CLIENT;
+				# XXX send info to admin
+			};
+	
+			# send data to agent
+			eval {
+				$agent->{response} = worker_send (
+					sock    => $agent->{sock}, 
+					request => \@request
+				);
+			}
+			or do {
+				$response = { status => 503, message => "Service \033[1m$service_name\033[0m unavailable. System error." };
+				last CLIENT;
+			};
 
-				# send data to agent
-				print $s_agent $json->encode(\@in);
-				while(<$s_agent>) {
-					chomp;
-					$a->{is_connected}++;
-					$a->{response} = $_;
-					last;
-				}
-				close($s_agent);
+			
+			# agent reports user error
+			if ($agent->{response}->{status}) {
+				print $s_client $json->encode($agent->{response});
+				next CLIENT;
+			} else {
+				$response = $agent->{response};
+			}
+			
+			# connect to exec
+			if (defined $exec_conf->{$service_name}->{$command_name}) {
+				my $container = $client->{uid};
+				eval {
+					$exec->{sock} = worker_connect (
+						port => $client->{uid}				
+					);
+				};
 
-				# agent not responding
-				if(! $a->{is_connected}) {
-					($err,$msg) = (666, "Service \033[1m$sub\033[0m is currently NOT available. Sorry about that.\nPlease try again later.");					
-					last;
+				# send data to executor	
+				eval {
+					$exec->{response} = worker_send (
+						sock    => $exec->{sock},
+						request => $client->{request}
+					);
 				}
-						
-			}}
-			my $response = $a->{response} ? $a->{response} : $json->encode({ status => $err, message => $msg, data => $data });
-			print $s_client $response;
-			last if $err;
+				or do {
+					$response->{status}  = 502;
+					$response->{message} = "Could not connect to container \033[1m" . $container . "\033[0m.\n\033[1;31mSome operations performed partially!\033[0m";
+				};
+			}
+
+			# send response
+			print $s_client $json->encode($response);
+
 		} # while $s_client
+		
+		# send status
+		print $s_client $json->encode($response);
 		close($s_client);
 		exit;
 	}
@@ -170,10 +239,59 @@ close($s_server);
 close STDOUT;
 close STDERR;
 
+sub worker_connect {
+	my ($worker) = { @_ };
+	$worker->{host} = $worker->{host} || '127.0.0.1';
+
+	# connect to worker
+	my $s_worker = new IO::Socket::INET (
+		PeerAddr  => $worker->{host},
+		PeerPort  => $worker->{port},
+		Proto     => 'tcp',
+		Timeout   => 1,
+		ReuseAddr => 0,
+	) or die;
+
+	return $s_worker;
+}
+
+sub worker_send {
+	my ($worker) = { @_ };
+	my ($status, $message);
+	my $s_worker = $worker->{sock};
+
+	# send request to worker
+	print $s_worker $json->encode($worker->{request});
+	
+	WORKER:
+	while(<$s_worker>) {
+		chomp;
+		$worker->{is_connected} = 1;		
+		$worker->{response} = $_;
+		last WORKER;
+	}
+	close($s_worker);
+
+	# worker is not responding 
+	die if !$worker->{is_connected};
+
+	return $json->decode($worker->{response});
+}
+
 =schema
 DROP TABLE IF EXISTS auth;
 CREATE TABLE auth (
 	uid SMALLINT UNSIGNED NOT NULL,
+	user_name VARCHAR(32) NOT NULL,
 	auth_key CHAR(41) NOT NULL,
 	PRIMARY KEY(uid)
 ) ENGINE=InnoDB, CHARACTER SET=UTF8;
+
+CREATE TABLE server (
+	id TINYINT UNSIGNED NOT NULL, 
+	server_name VARCHAR(16) NOT NULL,
+	ip_address CHAR(15) NOT NULL,
+	PRIMARY KEY(id),
+	KEY(ip_address)
+) ENGINE=InnoDB, CHARACTER SET=UTF8;
+

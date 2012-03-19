@@ -12,6 +12,32 @@ use warnings;
 use strict;
 use Data::Dumper;
 
+sub get_container_ip {
+        my($self, $id, $network) = @_;
+	my @ipaddr  = split /\./, $network;
+        my $i = 0;
+        for(reverse @ipaddr) {
+                # find zeros in ip
+                $_ == 0 ? $i++ : last;
+        }
+
+        if($i == 0) {
+                die "Wrong network address (".$network."). Check configuration.\n"
+        }
+
+        if(length($id) > $i*2) {
+                die "ID $id too big for specified network (".$network."). Check configuration.\n";
+        }
+
+        my $netmask = 32 - 8*$i;
+        for(my $j=1; $j<=$i; $j++) {
+                # get two numbers from the right
+                $ipaddr[-$j] = int substr($id, -2*$j, 2) || 0;
+        }
+	my $ipaddr = join('.', @ipaddr);
+        return $ipaddr;
+}
+
 sub sub_names {
 	my($self, $mod) = @_;
 	my $file = "Satan/$mod.pm";

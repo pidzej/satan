@@ -22,13 +22,28 @@ use Data::Validate::Domain qw(is_domain is_hostname);
 use Data::Validate::IP qw(is_ipv4 is_ipv6);
 
 use constant {
-	DEFAULT_PRIO => 10,
-	DEFAULT_TTL  => 300,
-	SOA_SERIAL   => 666,
-	SOA_REFRESH  => 10800, 
-	SOA_RETRY    => 3600,  
-	SOA_EXPIRE   => 604800,
-	SOA_MIN_TTL  => 300
+	DEFAULT_PRIO   => 10,
+	DEFAULT_TTL    => 300,
+	DEFAULT_SOA    => 'ns1.rootnode.net hostmaster.rootnode.net',
+	DEFAULT_NS1    => 'ns1.rootnode.net',
+	DEFAULT_NS2    => 'ns2.rootnode.net',
+	DEFAULT_MX1    => 'mail1.rootnode.net',
+	DEFAULT_MX2    => 'mail2.rootnode.net',
+	SOA_SERIAL     => 666,
+	SOA_REFRESH    => 10800, 
+	SOA_RETRY      => 3600,  
+	SOA_EXPIRE     => 604800,
+	SOA_MIN_TTL    => 300,
+	GMAIL_MX1      => 'ASPMX.L.GOOGLE.COM',
+	GMAIL_MX2      => 'ALT1.ASPMX.L.GOOGLE.COM',
+	GMAIL_MX3      => 'ALT2.ASPMX.L.GOOGLE.COM',
+	GMAIL_MX4      => 'ASPMX2.GOOGLEMAIL.COM',
+	GMAIL_MX5      => 'ASPMX3.GOOGLEMAIL.COM',
+	GMAIL_MX1_PRIO => 1,
+	GMAIL_MX2_PRIO => 5,
+	GMAIL_MX3_PRIO => 5,
+	GMAIL_MX4_PRIO => 10,
+	GMAIL_MX5_PRIO => 10,
 };
 
 $|++;
@@ -68,6 +83,7 @@ sub new {
 	
 	#$self->{dns_limit} = $dbh->prepare("SELECT dns FROM limits WHERE uid=?");
 	#$self->{event_add} = $dbh->prepare("INSERT INTO events(uid,date,daemon,event) VALUES(?,NOW(),'dns',?)");
+	$self->{dbh} = $dbh;
 	
 	bless $self, $class;
 	return $self;
@@ -75,7 +91,8 @@ sub new {
 
 sub add {
 	my($self,@args) = @_;
-	my $uid       = $self->{uid};
+	my $uid = $self->{uid};
+	my $dbh = $self->{dbh};  
 
 	my $dns_add_domain   = $self->{dns_add_domain};
 	my $dns_add_record   = $self->{dns_add_record};
@@ -94,7 +111,7 @@ sub add {
 	$dns_check_domain->execute($domain_name);
 	if($dns_check_domain->rows) {
 		($domain_id, my $domain_uid) = $dns_check_domain->fetchrow_array;
-		if(not $record_type) {		
+		if ($record_type !~ /^(a|aaaa|cname|mx|txt|srv|soa|ns|ptr)$/i) {		
 			if($domain_uid == $uid) {
 				return "Domain \033[1m$domain_name\033[0m already added. Nothing to do.";
 			} else {
@@ -103,14 +120,64 @@ sub add {
 		}
 	} else {
 		# domain doesn't exist
-		if(not $record_type) {
-			# add domain
-			$dns_add_domain->execute($uid,$domain_name,'NATIVE');
-			return;
-		} else {
-			return "Domain \033[1m$domain_name\033[0m does NOT exist! Please double check the name or\n"
-			     . "add the domain first with \033[1;32msatan dns add domain.com\033[0m command.";
+		unshift @args, $record_type;
+
+		# add domain
+		$dns_add_domain->execute($uid,$domain_name,'NATIVE');
+		$domain_id = $dbh->{mysql_insertid};
+		
+		# add basic records
+		my $soa_record = join(' ', DEFAULT_SOA, SOA_SERIAL, SOA_REFRESH, SOA_RETRY, SOA_EXPIRE, SOA_MIN_TTL);
+		$self->{dns_add_record}->execute($domain_id, $domain_name, 'SOA', $soa_record, DEFAULT_TTL, undef);
+		$self->{dns_add_record}->execute($domain_id, $domain_name, 'NS', DEFAULT_NS1, DEFAULT_TTL, undef);
+		$self->{dns_add_record}->execute($domain_id, $domain_name, 'NS', DEFAULT_NS2, DEFAULT_TTL, undef);
+
+		my $ipaddr = shift @args || '';
+		if ($ipaddr) {
+			if (is_ipv4($ipaddr)) {
+				$self->{dns_add_record}->execute($domain_id, $domain_name, 'A', $ipaddr, DEFAULT_TTL, undef);
+			} 
+			elsif (is_ipv6($ipaddr)) {
+				$self->{dns_add_record}->execute($domain_id, $domain_name, 'AAAA', $ipaddr, DEFAULT_TTL, undef);
+			} 
+			elsif ($ipaddr =~ /^(a|aaaa|cname|mx|txt|srv|soa|ns|ptr)$/i) {
+				# probably a typo in domain name
+				return "Domain \033[1m$domain_name\033[0m does NOT exist! Please double check the name or\n"
+				     . "add the domain first with \033[1;32msatan dns add domain.com\033[0m command.";
+			}
+			elsif ($ipaddr eq '') {
+				# do nothing
+			}
+			else {
+				return "IP \033[1m$ipaddr\033[0m is NOT a proper IP address. Some basic records not added."; 
+			}
+			$self->{dns_add_record}->execute($domain_id, "*.$domain_name", 'CNAME', $domain_name, DEFAULT_TTL, undef);
 		}
+
+		# add mx
+		my $mail = shift @args || '';
+		if ($mail eq 'nomail') {
+			# do nothing
+		} 
+		elsif ($mail eq 'gmail') {
+			# gmail mx
+			$self->{dns_add_record}->execute($domain_id, "mail.$domain_name", 'CNAME', 'ghs.google.com', DEFAULT_TTL, undef);
+			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', GMAIL_MX1, DEFAULT_TTL, GMAIL_MX1_PRIO);
+			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', GMAIL_MX2, DEFAULT_TTL, GMAIL_MX2_PRIO);
+			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', GMAIL_MX3, DEFAULT_TTL, GMAIL_MX3_PRIO);
+			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', GMAIL_MX4, DEFAULT_TTL, GMAIL_MX4_PRIO);
+			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', GMAIL_MX5, DEFAULT_TTL, GMAIL_MX5_PRIO);
+		}
+		elsif ($mail eq '') {
+			# rootnode mx
+			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', DEFAULT_MX1, DEFAULT_TTL, DEFAULT_PRIO);
+			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', DEFAULT_MX2, DEFAULT_TTL, DEFAULT_PRIO);
+		} 
+		else {
+			return "Option \033[1m$mail\033[0m NOT recognized. Some basic records not added.";
+		}
+		
+		return;
 	}
 
 	# subroutines for record type
@@ -150,7 +217,7 @@ sub add {
 		return; # success
 	}
 	
-	my($record_ttl, $record_prio) = (DEFAULT_TTL,undef);
+	my($record_ttl, $record_prio) = (DEFAULT_TTL, undef);
 
 	my $host_name = shift @args or return "Not enough arguments! \033[1mHost name\033[0m NOT specified. Please die or read help.";
 	   $host_name = lc $host_name;
@@ -356,8 +423,8 @@ sub help {
 \033[1mSatan :: DNS\033[0m
 
 \033[1;32mSYNTAX\033[0m
-  dns add <domain>                                     add domain (basic records included)
-  dns add <domain> a     <host|@|.> <ip>               add A record
+  dns add <domain> [<ipaddr>] [nomail|gmail]           add domain (incl. basic records)
+  dns add <domain> a     <host|@|.> <ipv4>             add A record
   dns add <domain> aaaa  <host|@|.> <ipv6>             add AAAA record
   dns add <domain> cname <host|@|.> <domain>           add CNAME record
   dns add <domain> mx    <host|@|.> <domain> [<prio>]  add MX record

@@ -1,0 +1,9 @@
+# Agent configuration
+dns: 
+    port: 1609
+
+vhost: 
+    port: 1608
+
+mysql:
+    port: 1610

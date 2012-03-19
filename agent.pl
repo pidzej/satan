@@ -40,7 +40,7 @@ while(my $s_server = $s_agent->accept()) {
                 chomp;
 		my($c, @in);
 		my($err,$msg,$data) = (0, q[OK], undef);
-		eval { ($c->{uid}, @in) = @{$json->decode($_)} } or do {
+		eval { ($c, @in) = @{$json->decode($_)} } or do {
 			($err,$msg) = (666, 'Cannot parse JSON');
 			last;
 		};
@@ -49,6 +49,7 @@ while(my $s_server = $s_agent->accept()) {
 			my $mod = 'Satan::'.ucfirst($sub); 
 			my $obj = $mod->new(uid => $c->{uid});
 			$msg  = $obj->$cmd(@in) and $err = 1;
+			$msg  = $msg || 'OK';
 			$data = $obj->get_data;
 		} else {
 			$msg = "Command \033[1m$cmd\033[0m is NOT available. Available commands are: \033[1;32m".join(' ', sort @names)."\033[0m.\n"
