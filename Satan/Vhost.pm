@@ -16,6 +16,7 @@ use Data::Dumper;
 #use Crypt::GeneratePassword qw(chars);
 #use Data::Password qw(:all);
 use Tie::File;
+use FindBin qw($Bin);
 use feature 'switch';
 use utf8;
 use warnings;
@@ -33,7 +34,7 @@ Readonly my $CONTAINER_NETWORK => '10.1.0.0';
 sub new {
 	my $class = shift;
 	my ($self) = @_;
-	my $dbh = DBI->connect("dbi:mysql:nginx;mysql_read_default_file=/root/.my.cnf",undef,undef,{ RaiseError => 0, AutoCommit => 1 });
+	my $dbh = DBI->connect("dbi:mysql:nginx;mysql_read_default_file=$Bin/../config/my.cnf",undef,undef,{ RaiseError => 0, AutoCommit => 1 });
 	$dbh->{mysql_auto_reconnect} = 1;
 	$dbh->{mysql_enable_utf8} = 1;
 

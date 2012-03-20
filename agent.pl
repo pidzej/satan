@@ -12,19 +12,28 @@ use strict;
 use JSON::XS;
 use IO::Socket;
 use YAML qw(LoadFile);
+use FindBin qw($Bin);
 use Data::Dumper;
-use Class::Inspector;
 
+use lib $Bin;
 use Satan::Dns;
+use Satan::Vhost;
 use Satan::Tools;
 
 $|++;
 $SIG{CHLD} = 'IGNORE'; # braaaaains!!!
 my $json  = JSON::XS->new->utf8;
-my $agent = YAML::LoadFile('config/agent.yaml');
+my $agent = YAML::LoadFile("$Bin/../config/agent.yaml");
 
 my $sub   = shift or die "Subsystem not specified!\n";
 my @names = Satan::Tools->sub_names(ucfirst($sub));
+
+unless (@ARGV) {
+        open STDOUT,">>","$Bin/../logs/access.log";
+        open STDERR,">>","$Bin/../logs/error.log";
+        chmod 0600,"$Bin/../logs/access.log";
+        chmod 0600,"$Bin/../logs/error.log";
+}
 
 my $a = $agent->{$sub};
 my $s_agent = new IO::Socket::INET (
@@ -38,7 +47,7 @@ my $s_agent = new IO::Socket::INET (
 while(my $s_server = $s_agent->accept()) {
         while(<$s_server>) {
                 chomp;
-		my($c, @in);
+		my($c, @in); # client info and input args
 		my($err,$msg,$data) = (0, q[OK], undef);
 		eval { ($c, @in) = @{$json->decode($_)} } or do {
 			($err,$msg) = (666, 'Cannot parse JSON');
@@ -47,7 +56,7 @@ while(my $s_server = $s_agent->accept()) {
 		my $cmd = shift @in || 'list';
 		if(grep /^\Q$cmd\E$/, @names) {
 			my $mod = 'Satan::'.ucfirst($sub); 
-			my $obj = $mod->new(uid => $c->{uid});
+			my $obj = $mod->new($c);
 			$msg  = $obj->$cmd(@in) and $err = 1;
 			$msg  = $msg || 'OK';
 			$data = $obj->get_data;
