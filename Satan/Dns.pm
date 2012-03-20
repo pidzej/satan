@@ -14,6 +14,7 @@ use DBI;
 use Data::Dumper;
 use Crypt::GeneratePassword qw(chars);
 use Data::Password qw(:all);
+use FindBin qw($Bin);
 use feature 'switch';
 use utf8;
 use warnings;
@@ -51,8 +52,8 @@ $SIG{CHLD} = 'IGNORE';
 
 sub new {
 	my $class = shift;
-	my $self = { @_	};
-	my $dbh = DBI->connect("dbi:mysql:pdns;mysql_read_default_file=/root/.my.cnf",undef,undef,{ RaiseError => 0, AutoCommit => 1 });
+	my ($self) =  @_;
+	my $dbh = DBI->connect("dbi:mysql:pdns;mysql_read_default_file=$Bin/../config/my.cnf",undef,undef,{ RaiseError => 0, AutoCommit => 1 });
 
 	$self->{dns_add_domain}      = $dbh->prepare("INSERT INTO domains(uid,name,type) VALUES(?,?,?)");
 	$self->{dns_add_record}      = $dbh->prepare("INSERT INTO records(domain_id,name,type,content,ttl,prio,change_date) VALUES (?,?,?,?,?,?,UNIX_TIMESTAMP(NOW()))");
