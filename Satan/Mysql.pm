@@ -13,6 +13,7 @@ use strict;
 use 5.010; # ~~ operator
 use feature 'switch';
 use utf8;
+use FindBin qw($Bin);
 use IO::Socket;
 use DBI;
 use Crypt::GeneratePassword qw(chars);
@@ -28,8 +29,8 @@ $SIG{CHLD} = 'IGNORE';
 
 sub new {
 	my $class = shift;
-	my $self = { @_	};
-        my $dbh = DBI->connect("dbi:mysql:mysql;mysql_read_default_file=/root/.my.cnf",undef,undef,{ RaiseError => 0, AutoCommit => 1 });
+	my ($self) = @_;
+        my $dbh = DBI->connect("dbi:mysql:mysql;mysql_read_default_file=$Bin/../config/my.cnf",undef,undef,{ RaiseError => 0, AutoCommit => 1 });
 	$dbh->{mysql_auto_reconnect} = 1;
 	$dbh->{mysql_enable_utf8} = 1;
 
@@ -282,8 +283,8 @@ sub list {
 		$database{ $db_name }->{$user_name}++;
 	}
 
-	print Dumper(\%user);
-	print Dumper(\%database);
+	#print Dumper(\%user);
+	#print Dumper(\%database);
 	
 	my $detailed_listing = shift @args;
 	if ($detailed_listing) {

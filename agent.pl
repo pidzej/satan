@@ -18,6 +18,7 @@ use Data::Dumper;
 use lib $Bin;
 use Satan::Dns;
 use Satan::Vhost;
+use Satan::Mysql;
 use Satan::Tools;
 
 $|++;
