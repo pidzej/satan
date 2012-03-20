@@ -33,19 +33,20 @@ use DBI;
 use Data::Dumper;
 use JSON::XS;
 use YAML qw(LoadFile);
-use FindBin qw($Bin);
+use FindBin qw($Bin); 
 use Readonly;
-use lib $Bin;
 use feature 'switch';
 use warnings;
 use strict;
+
+use lib $Bin;
 
 $|++;
 $SIG{CHLD} = 'IGNORE'; # braaaaains!!
 
 my $json       = JSON::XS->new->utf8;
-my $agent_conf = YAML::LoadFile('config/agent.yaml');
-my $exec_conf  = YAML::LoadFile('config/exec.yaml');
+my $agent_conf = YAML::LoadFile("$Bin/../config/agent.yaml");
+my $exec_conf  = YAML::LoadFile("$Bin/../config/exec.yaml");
 
 my $satan_services = join(q[ ], sort keys %$agent_conf);
 Readonly my $USAGE => <<"END_USAGE";
@@ -61,10 +62,10 @@ Bug reporting on mailing list.
 END_USAGE
 
 unless (@ARGV) {
-	open STDOUT,">>","$Bin/access.log";
-	open STDERR,">>","$Bin/error.log";
-	chmod 0600,"$Bin/access.log";
-	chmod 0600,"$Bin/error.log";
+	open STDOUT,">>","$Bin/../logs/access.log";
+	open STDERR,">>","$Bin/../logs/error.log";
+	chmod 0600,"$Bin/../logs/access.log";
+	chmod 0600,"$Bin/../logs/error.log";
 }
 
 my $s_server = new IO::Socket::INET (
@@ -76,7 +77,7 @@ my $s_server = new IO::Socket::INET (
 ) or die "Cannot create socket! $!\n";
 
 # connect to db
-my $dbh = DBI->connect("dbi:mysql:satan;mysql_read_default_file=/root/.my.cnf",undef,undef,{ RaiseError => 1, AutoCommit => 1 });
+my $dbh = DBI->connect("dbi:mysql:satan;mysql_read_default_file=$Bin/../config/my.cnf",undef,undef,{ RaiseError => 1, AutoCommit => 1 });
 $dbh->{mysql_auto_reconnect} = 1;
 $dbh->{mysql_enable_utf8}    = 1;
 
