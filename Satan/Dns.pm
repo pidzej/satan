@@ -181,7 +181,7 @@ sub add {
 	}
 
 	# subroutines for record type
-	sub get_record_name {
+	sub _get_record_name {
 		my($host_name,$domain_name) = @_;
 		($host_name and $domain_name) or die "Not enough parameters in get_record_name sub.";
 
@@ -199,7 +199,7 @@ sub add {
 		return $record_name;
 	}
 	
-	sub check_host_name {
+	sub _check_host_name {
 		my($host_name) = @_;
 		($host_name) or die "Not enough parameters in check_host_name sub.";
 
@@ -221,10 +221,10 @@ sub add {
 
 	my $host_name = shift @args or return "Not enough arguments! \033[1mHost name\033[0m NOT specified. Please die or read help.";
 	   $host_name = lc $host_name;
-	my $check_host_name = &check_host_name($host_name);
+	my $check_host_name = _check_host_name($host_name);
 	   $check_host_name and return $check_host_name;
 
-	my $record_name = &get_record_name($host_name, $domain_name);
+	my $record_name = _get_record_name($host_name, $domain_name);
 	my $record_content;
 
 	given($record_type) {
@@ -261,9 +261,9 @@ sub add {
 		when('srv') {
 			# satan dns add domain.com srv <host> <prio> <weight> <port> <domain>
 			my($host_service, $host_proto) = $host_name =~ /^_(.+)\._(.+)$/; # split host name into <service> and <proto>
-			($host_service and $host_proto) or return "Bad host name \033[1m$host_name\033[0m! Please use _<service>._<proto> host name.";
-			is_hostname($host_service)             or return "Service \033[1m$host_service\033[0m is NOT a proper host name.";
-			$host_proto =~ /^(tcp|udp)$/           or return "Bad protocol \033[1m$host_proto\033[0m. Only TCP and UDP is supported.";
+			($host_service and $host_proto)   or return "Bad host name \033[1m$host_name\033[0m! Please use _<service>._<proto> host name.";
+			is_hostname($host_service)        or return "Service \033[1m$host_service\033[0m is NOT a proper host name.";
+			$host_proto =~ /^(tcp|udp)$/      or return "Bad protocol \033[1m$host_proto\033[0m. Only TCP and UDP is supported.";
 
 			my $srv_prio = shift @args        or return "Not enough arguments! \033[1mPriority\033[0m NOT specified. Please die or read help.";
 			   $srv_prio =~ /^([^0]\d*|0)$/   or return "Priority \033[1m$srv_prio\033[0m must be a number! Try again.";
@@ -467,7 +467,7 @@ END_OF_USAGE
 	return;
 }
 
-sub get_data {
+sub _get_data {
 	my $self = shift;
 	return $self->{listing} || '';
 }

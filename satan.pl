@@ -29,12 +29,14 @@
 # SUCH DAMAGE.
 #
 use IO::Socket;
+use IO::Socket::Socks;
 use DBI;
 use Data::Dumper;
 use JSON::XS;
 use YAML qw(LoadFile);
 use FindBin qw($Bin); 
 use Readonly;
+use List::MoreUtils qw(any);
 use feature 'switch';
 use warnings;
 use strict;
@@ -48,7 +50,9 @@ my $json       = JSON::XS->new->utf8;
 my $agent_conf = YAML::LoadFile("$Bin/../config/agent.yaml");
 my $exec_conf  = YAML::LoadFile("$Bin/../config/exec.yaml");
 
-my $satan_services = join(q[ ], sort keys %$agent_conf);
+Readonly my $PROXY_PORT => 1605;
+
+my $satan_services = join(q[ ], sort grep { $_ ne 'admin' } keys %$agent_conf);
 Readonly my $USAGE => <<"END_USAGE";
 \033[1mSatan - the most hellish service manager\033[0m
 Usage: satan [SERVICE] [TASK] [ARGS]
@@ -61,11 +65,10 @@ For additional information visit http://rootnode.net
 Bug reporting on mailing list.
 END_USAGE
 
-unless (@ARGV) {
+if (!@ARGV) {
+	umask 0077;
 	open STDOUT,">>","$Bin/../logs/access.log";
 	open STDERR,">>","$Bin/../logs/error.log";
-	chmod 0600,"$Bin/../logs/access.log";
-	chmod 0600,"$Bin/../logs/error.log";
 }
 
 my $s_server = new IO::Socket::INET (
@@ -83,8 +86,10 @@ $dbh->{mysql_enable_utf8}    = 1;
 
 # db statements
 my $db;
-$db->{get_credentials} = $dbh->prepare("SELECT user_name   FROM auth   WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
-$db->{get_server_name} = $dbh->prepare("SELECT server_name FROM server WHERE ip_address=?");  
+$db->{get_user_credentials}  = $dbh->prepare("SELECT user_name        FROM user_auth  WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
+$db->{get_admin_credentials} = $dbh->prepare("SELECT user_name, privs FROM admin_auth WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
+
+$db->{get_server_name} = $dbh->prepare("SELECT id, server_name FROM server_list WHERE ip_address=?");  
 
 while(my $s_client = $s_server->accept()) {
 	$s_client->autoflush(1);
@@ -97,13 +102,21 @@ while(my $s_client = $s_server->accept()) {
 
 		# server name
 		$db->{get_server_name}->execute($client->{ipaddr});
-		$client->{server_name} = $db->{get_server_name}->fetchrow_array;
+		( $client->{server_id}, $client->{server_name} ) = $db->{get_server_name}->fetchrow_array;
+
+		print Dumper($client);
 
 		CLIENT:
                 while(<$s_client>) {
 			# skip empty lines
 			chomp; /^$/ and next CLIENT;
-			
+
+			# check server name
+			#if (!$client->{server_name}) {
+			#	$response = { status => 400, message => "Request came from unknown server ($client->{ipaddr})" };
+			#	last CLIENT;	
+			#}
+	
 			if(/^\[.*\]$/) { 
 				# json input
 				eval { 	
@@ -126,15 +139,21 @@ while(my $s_client = $s_server->accept()) {
 				# get uid and key from request
 				($client->{uid}, $client->{key}) = @request;
 
-				# check credentials against db
-				$db->{get_credentials}->execute($client->{uid}, $client->{key});
-				if($db->{get_credentials}->rows) {
+				# special privileges for uids < 1000
+				$client->{type} = $client->{uid} < 1000 ? 'admin' : 'user';
+	
+				# get_user_credentials or get_admin_credentials
+				my $cred_query = join('_', 'get', $client->{type}, 'credentials'); 
+				
+				# check user credentials against db
+				$db->{$cred_query}->execute($client->{uid}, $client->{key});
+				if($db->{$cred_query}->rows) {
 					# user is authenticated
 					$client->{is_auth} = 1;
 					delete $client->{key};
 			
-					# get user name
-					$client->{user_name} = $db->{get_credentials}->fetchrow_array;
+					# get user name and privs 
+					( $client->{user_name}, $client->{privs} )  = $db->{$cred_query}->fetchrow_array;
 				} 
 				else {
 					$response = { status => 401, message => 'Unauthorized' };
@@ -147,18 +166,34 @@ while(my $s_client = $s_server->accept()) {
 			
 			# get service name
 			my $service_name = shift @request || 'help';
-	
+
 			# get command name
 			my $command_name = $request[0] || '';
-
-			# push client info to request
-			unshift @request, $client;
 			
-			# display usage
-			if($service_name eq 'help') {
+ 			# display usage
+			if ($service_name eq 'help' or $service_name eq '?') {
 				$response = { status => 404, message => $USAGE };
 				last CLIENT;
 			}
+			
+			# admin user privilege
+			if ($client->{type} eq 'admin') {
+				$client->{privs} =~ s/\s+//g;             # trim whitespaces
+				my @privs = split /,/, $client->{privs};  # store as array
+				my %privs = map { $_ => 1 } @privs;       # store as hash
+
+				# check if privileged
+				if (not defined $privs{$command_name} or $service_name ne 'admin') { 
+					$response = { status => 401, message => 'Unauthorized' };
+					last CLIENT;
+				}				
+			} else {
+				# delete admin agent from list
+				delete $agent_conf->{admin};
+			}		
+			
+			# push client info to request
+			unshift @request, $client;
 		
 			# get agent configuration
 			$agent = $agent_conf->{$service_name};
@@ -169,6 +204,8 @@ while(my $s_client = $s_server->accept()) {
 				last CLIENT;
 			}
 			
+			print Dumper($agent);
+		
 			# connect to agent
 			eval {
 				$agent->{sock} = worker_connect (
@@ -192,7 +229,8 @@ while(my $s_client = $s_server->accept()) {
 				$response = { status => 503, message => "Service \033[1m$service_name\033[0m unavailable. System error." };
 				last CLIENT;
 			};
-
+			
+			print "AGENT RESPONSE:\n" . Dumper($agent->{response});
 			
 			# agent reports user error
 			if ($agent->{response}->{status}) {
@@ -204,26 +242,49 @@ while(my $s_client = $s_server->accept()) {
 			
 			# connect to exec
 			if (defined $exec_conf->{$service_name}->{$command_name}) {
-				my $container = $client->{uid};
+
+				# client uid is container id
+				my $container_id = $client->{uid};
+
+				# connect to executor (via socks proxy)
 				eval {
-					$exec->{sock} = worker_connect (
-						port => $client->{uid}				
+					$exec->{sock} = worker_connect(
+						type => 'socks',
+						port => $container_id
 					);
+				} or do {
+					print "Cannot connect to proxy";
+					print $@;
+					$response->{status}  = 502;
+					$response->{message} = "Could not connect to container \033[1m" . $container_id . "\033[0m.\n\033[1;31mSome operations performed partially!\033[0m";
 				};
+
+				# prepare request for executor			
+				$exec->{request} = $client->{request};
+					
+				# add exec key and client uid to exec request
+				unshift @{ $exec->{request} }, $exec_conf->{key}, $client->{uid};
 
 				# send data to executor	
 				eval {
-					$exec->{response} = worker_send (
+					$exec->{response} = worker_send(
 						sock    => $exec->{sock},
-						request => $client->{request}
+						request => $exec->{request}
 					);
 				}
 				or do {
-					$response->{status}  = 502;
-					$response->{message} = "Could not connect to container \033[1m" . $container . "\033[0m.\n\033[1;31mSome operations performed partially!\033[0m";
+					print "Cannot send";
+					print $@;
+					$response->{status}  = 503;
+					$response->{message} = "Could not send data to container \033[1m" . $container_id . "\033[0m.\n\033[1;31mSome operations performed partially!\033[0m";
 				};
+				
+				# exec reports error
+				if ($exec->{response}->{status}) {
+					$response = $exec->{response};
+				}
 			}
-
+				
 			# send response
 			print $s_client $json->encode($response);
 
@@ -241,23 +302,40 @@ close STDOUT;
 close STDERR;
 
 sub worker_connect {
-	my ($worker) = { @_ };
-	$worker->{host} = $worker->{host} || '127.0.0.1';
+	my $worker = { @_ };
+	$worker->{type}      = $worker->{type}      || 'inet';
+	$worker->{host}      = $worker->{host}      || '127.0.0.1';
+	$worker->{proxyhost} = $worker->{proxyhost} || '127.0.0.1';
+	$worker->{proxyport} = $worker->{proxyport} || $PROXY_PORT;
 
 	# connect to worker
-	my $s_worker = new IO::Socket::INET (
-		PeerAddr  => $worker->{host},
-		PeerPort  => $worker->{port},
-		Proto     => 'tcp',
-		Timeout   => 1,
-		ReuseAddr => 0,
-	) or die;
+	my $s_worker;
+	
+	# socks connection
+	if ($worker->{type} eq 'socks') {
+		$s_worker = IO::Socket::Socks->new(
+			ProxyAddr   => $worker->{proxyhost},
+			ProxyPort   => $worker->{proxyport},
+			ConnectAddr => $worker->{host},
+			ConnectPort => $worker->{port}
+		) or die;
+	} 
+	# inet socket
+	else {
+		$s_worker = IO::Socket::INET->new(
+			PeerAddr  => $worker->{host},
+			PeerPort  => $worker->{port},
+			Proto     => 'tcp',
+			Timeout   => 1,
+			ReuseAddr => 0,
+		) or die;
+	}
 
 	return $s_worker;
 }
 
 sub worker_send {
-	my ($worker) = { @_ };
+	my $worker = { @_ };
 	my ($status, $message);
 	my $s_worker = $worker->{sock};
 
@@ -276,19 +354,38 @@ sub worker_send {
 	# worker is not responding 
 	die if !$worker->{is_connected};
 
+	# return decoded data
 	return $json->decode($worker->{response});
 }
 
+=satan admin
+
+satan admin pam add
+satan admin satan add
+satan admin 
+
+satan admin add
+satan admin del
+satan admin passwd
+satan admin pay
+
 =schema
-DROP TABLE IF EXISTS auth;
-CREATE TABLE auth (
+CREATE TABLE user_auth (
 	uid SMALLINT UNSIGNED NOT NULL,
 	user_name VARCHAR(32) NOT NULL,
 	auth_key CHAR(41) NOT NULL,
 	PRIMARY KEY(uid)
 ) ENGINE=InnoDB, CHARACTER SET=UTF8;
 
-CREATE TABLE server (
+CREATE TABLE admin_auth (
+	uid SMALLINT UNSIGNED NOT NULL,
+	user_name VARCHAR(32) NOT NULL,
+	auth_key CHAR(41) NOT NULL,
+	privs VARCHAR(255) DEFAULT '',
+	PRIMARY KEY(uid)
+) ENGINE=InnoDB, CHARACTER SET=UTF8;
+
+CREATE TABLE server_list (
 	id TINYINT UNSIGNED NOT NULL, 
 	server_name VARCHAR(16) NOT NULL,
 	ip_address CHAR(15) NOT NULL,

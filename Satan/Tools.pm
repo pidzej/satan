@@ -45,7 +45,7 @@ sub sub_names {
 	if(-f $file) {
 		open(FH, '<', $file);
 		while(<FH>) {
-			if(/^sub\s([a-z]+)\s{$/) {
+			if(/^sub\s([^_]\w+)\s{$/) {
 				my $sub_name = $1;
 				push @names, $sub_name if $sub_name ne 'new';
 			}
@@ -96,13 +96,13 @@ sub id {
                 push @ids,$row;
         }
         @ids=sort {$a <=> $b} @ids;
-	print Dumper(@ids);
         for my $i (0 .. @ids) {
                 my $id = $i+$min;
                 if(not defined $ids[$i] or $id != $ids[$i]) {
                         return $id;
                 }
         }
+	return;
 }
 
 sub listing {

@@ -12,3 +12,5 @@ Needed packages:
   libdata-password-perl
   libdata-validate-domain-perl
   libdata-validate-ip-perl
+  libio-socket-socks-perl
+  libsmart-comments-perl
