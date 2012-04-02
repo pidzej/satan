@@ -10,6 +10,7 @@ package Satan::Tools;
 
 use warnings;
 use strict;
+use FindBin qw($Bin);
 use Data::Dumper;
 
 sub get_container_ip {
@@ -40,7 +41,7 @@ sub get_container_ip {
 
 sub sub_names {
 	my($self, $mod) = @_;
-	my $file = "Satan/$mod.pm";
+	my $file = "$Bin/Satan/$mod.pm";
 	my @names;
 	if(-f $file) {
 		open(FH, '<', $file);
