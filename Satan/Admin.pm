@@ -10,10 +10,11 @@ package Satan::Admin;
 
 use Satan::Tools;
 use Rootnode::Validate;
+use Rootnode::Password;
 use DBI;
 use Data::Dumper;
 use Smart::Comments;
-use Crypt::GeneratePassword qw(chars);
+use Crypt::GeneratePassword qw(chars word);
 use Data::Password qw(:all);
 use Crypt::PasswdMD5 ;
 use FindBin qw($Bin);
@@ -30,8 +31,27 @@ $SIG{CHLD} = 'IGNORE';
 $MINLEN = 8;
 $MAXLEN = 20;
 
+# configuration
 Readonly my $MIN_UID => 2000;
-Readonly my $MAX_UUD => 6500;
+Readonly my $MAX_UID => 6500;
+Readonly my $USER_PASS_MINLEN =>  8;
+Readonly my $USER_PASS_MAXLEN => 12;
+Readonly my $PAM_PASS_MINLEN  => 14;
+Readonly my $PAM_PASS_MAXLEN  => 18;
+Readonly my $SATAN_KEY_MINLEN => 14;
+Readonly my $SATAN_KEY_MAXLEN => 16;
+Readonly my @export_ok => qw( adduser deluser passwd );
+
+sub get_data {
+        my $self = shift;
+        return $self->{data};
+}
+
+sub get_export {
+	my $self = shift;
+	my %export_ok = map { $_ => 1 } @export_ok;
+	return %export_ok;
+}
 
 sub new {
 	my ($class, $self) = @_;
@@ -50,7 +70,7 @@ sub new {
 	$pam->{dbh} = DBI->connect("dbi:mysql:nss;mysql_read_default_file=$Bin/../config/my.pam.cnf",undef,undef,{ RaiseError => 1, AutoCommit => 0 });
 
 	# add
-	$pam->{add_user}       = $pam->{dbh}->prepare("INSERT INTO all_users(uid, gid, user_name, realname, password, status, homedir, lastchange, min, max, owner) VALUES(?, ?, ?, ?, ?, 'A', ?, 0, $MINLEN, $MAXLEN, ?)"); 
+	$pam->{add_user}       = $pam->{dbh}->prepare("INSERT INTO all_users(uid, gid, user_name, realname, password, status, homedir, lastchange, min, max, owner) VALUES(?, ?, ?, ?, ?, 'A', ?, '', $MINLEN, $MAXLEN, ?)"); 
 	$pam->{add_group}      = $pam->{dbh}->prepare("REPLACE INTO all_groups(gid, group_name, owner)       VALUES (?, ?, ?)"); 
 	$pam->{add_user_group} = $pam->{dbh}->prepare("REPLACE INTO all_user_group(user_id, group_id, owner) VALUES (?, ?, ?)");
 	
@@ -73,30 +93,9 @@ sub new {
 	$pam->{drop_user}               = $pam->{dbh}->prepare("DROP USER ?");
 
 	$self->{db} = $db;
+	
 	bless $self, $class;
 	return $self;
-}
-
-sub DESTROY {
-	my ($self) = @_;
-	my $db = $self->{db};
-	$db->{satan}->{dbh}->disconnect;
-	$db->{pam}->{dbh}->disconnect;
-	return;
-}
-
-sub crypt_password {
-	my ($password) = @_;
-	my @chars = ("A" .. "Z", "a" .. "z", 0 .. 9, qw(. /) );
-	my $salt = join("", @chars[ map { rand @chars} ( 1 .. 8) ]);
-	return unix_md5_crypt($password, $salt);
-}
-
-sub commit {
-	my ($db) = @_;
-	$db->{satan}->{dbh}->commit;
-	$db->{pam}->{dbh}->commit;
-	return;
 }
 
 sub adduser {
@@ -134,15 +133,21 @@ sub adduser {
 		);
 	}
 
-	### UID: $uid	
-
 	# validate uid
 	my $bad_uid = validate_uid($uid);
 	   $bad_uid and return "Wrong uid. $bad_uid.";
 	
-	# get passwords or generate
-	my $user_password = $value_of{user_password} || chars($MINLEN, $MAXLEN);
-	my $satan_key     = $value_of{satan_key}     || chars($MINLEN, $MAXLEN);
+	# get user password
+	my $user_password   = $value_of{user_password};
+	my $user_password_p = q{};
+
+	if (not defined $user_password) {
+		($user_password, $user_password_p) = apg($USER_PASS_MINLEN, $USER_PASS_MAXLEN, 'with_pronunciation');
+	}
+	
+	# get satan key
+	my $satan_key = $value_of{satan_key} || apg($SATAN_KEY_MINLEN, $SATAN_KEY_MAXLEN);
+	
 
 	# crypt user password
 	my $user_password_crypt = crypt_password($user_password);
@@ -155,8 +160,14 @@ sub adduser {
 	   $bad_user_password and return "Satan password is too simple: $bad_satan_key.";
 
 	# pam passwords
-	my $pam_passwd = chars($MINLEN, $MAXLEN);
-	my $pam_shadow = chars($MINLEN, $MAXLEN);
+	my $pam_passwd = apg($PAM_PASS_MINLEN, $PAM_PASS_MAXLEN);
+	my $pam_shadow = apg($PAM_PASS_MINLEN, $PAM_PASS_MAXLEN);
+	
+	# check passwords
+	return 'Satan key is empty'     if not defined $satan_key     or length($satan_key)     < $SATAN_KEY_MINLEN;
+	return 'User password is empty' if not defined $user_password or length($user_password) < $USER_PASS_MINLEN; 
+	return 'Pam password is empty'  if not defined $pam_passwd    or length($pam_passwd)    < $PAM_PASS_MINLEN;
+	return 'Pam shadow is empty'    if not defined $pam_shadow    or length($pam_shadow)    < $PAM_PASS_MINLEN;
 
 	# check user in db
 	foreach my $type ( qw(pam satan) ) {
@@ -197,11 +208,12 @@ sub adduser {
 	
 	# prepare user data 
 	$self->{data} = { 
-		uid           => $uid,
-		user_password => $user_password,
-		satan_key     => $satan_key,
-		pam_passwd    => $pam_passwd,
-		pam_shadow    => $pam_shadow,
+		uid             => $uid,
+		user_password   => $user_password,
+		user_password_p => $user_password_p,
+		satan_key       => $satan_key,
+		pam_passwd      => $pam_passwd,
+		pam_shadow      => $pam_shadow,
 	};
 
 	### Return data: $self->{data}
@@ -221,6 +233,8 @@ sub deluser {
 	my $user_name = shift @args or return "Username not specified. Cannot proceed.";
 	   $user_name = lc $user_name;
 
+	### Username: $user_name
+	
 	# validate username
 	my $bad_username = validate_username($user_name);
 	   $bad_username and return "Wrong username. $bad_username.";
@@ -362,9 +376,26 @@ sub passwd {
 	return;
 }
 
-sub _get_data {
-        my $self = shift;
-        return $self->{data} || '';
+sub crypt_password {
+	my ($password) = @_;
+	my @chars = ("A" .. "Z", "a" .. "z", 0 .. 9, qw(. /) );
+	my $salt = join("", @chars[ map { rand @chars} ( 1 .. 8) ]);
+	return unix_md5_crypt($password, $salt);
+}
+
+sub commit {
+	my ($db) = @_;
+	$db->{satan}->{dbh}->commit;
+	$db->{pam}->{dbh}->commit;
+	return;
+}
+
+sub DESTROY {
+	my ($self) = @_;
+	my $db = $self->{db};
+	$db->{satan}->{dbh}->disconnect;
+	$db->{pam}->{dbh}->disconnect;
+	return;
 }
 
 1;

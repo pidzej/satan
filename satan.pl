@@ -37,6 +37,7 @@ use YAML qw(LoadFile);
 use FindBin qw($Bin); 
 use Readonly;
 use List::MoreUtils qw(any);
+use Smart::Comments;
 use feature 'switch';
 use warnings;
 use strict;
@@ -94,8 +95,7 @@ $db->{get_server_name} = $dbh->prepare("SELECT id, server_name FROM server_list 
 while(my $s_client = $s_server->accept()) {
 	$s_client->autoflush(1);
         if(fork() == 0) {
-		my ($client, $agent, $exec, @request, $response);
-		my ($status, $message) = (0, 'OK');
+		my ($client, $agent, $exec, $request, $response);
 
 		# client ip
 		$client->{ipaddr} = $s_client->peerhost;
@@ -120,24 +120,22 @@ while(my $s_client = $s_server->accept()) {
 			if(/^\[.*\]$/) { 
 				# json input
 				eval { 	
-					$client->{request} = $json->decode($_);
+					$request = $json->decode($_);
+					print Dumper($request);
 				} or do {
-					$response = { status => 400, message => 'Bad request. Cannot parse JSON' };
+					$response = { status => 405, message => 'Bad request. Cannot parse JSON' };
 					last CLIENT;
 				}
 			} 
 			else { 
 				# plain text input
-				$client->{request} = [ split(/\s/) ];
+				$request = [ split(/\s/) ];
 			}
-			
-			# store request as array
-			@request = @{$client->{request}};
-			
+
 			# client authentication
 			if(! $client->{is_auth}) {
 				# get uid and key from request
-				($client->{uid}, $client->{key}) = @request;
+				($client->{uid}, $client->{key}) = @$request;
 
 				# special privileges for uids < 1000
 				$client->{type} = $client->{uid} < 1000 ? 'admin' : 'user';
@@ -165,14 +163,14 @@ while(my $s_client = $s_server->accept()) {
 			}
 			
 			# get service name
-			my $service_name = shift @request || 'help';
+			my $service_name = shift @$request || 'help';
 
 			# get command name
-			my $command_name = $request[0] || '';
+			my $command_name = $request->[0] || '';
 			
  			# display usage
 			if ($service_name eq 'help' or $service_name eq '?') {
-				$response = { status => 404, message => $USAGE };
+				$response = { status => 0, message => 'OK', data => $USAGE };
 				last CLIENT;
 			}
 			
@@ -181,6 +179,9 @@ while(my $s_client = $s_server->accept()) {
 				$client->{privs} =~ s/\s+//g;             # trim whitespaces
 				my @privs = split /,/, $client->{privs};  # store as array
 				my %privs = map { $_ => 1 } @privs;       # store as hash
+
+				### $command_name
+				### $service_name				
 
 				# check if privileged
 				if (not defined $privs{$command_name} or $service_name ne 'admin') { 
@@ -192,9 +193,11 @@ while(my $s_client = $s_server->accept()) {
 				delete $agent_conf->{admin};
 			}		
 			
-			# push client info to request
-			unshift @request, $client;
-		
+			# push client info into request;
+			$request = [ $client, $request ];
+			
+			print Dumper($request);
+
 			# get agent configuration
 			$agent = $agent_conf->{$service_name};
 
@@ -204,8 +207,6 @@ while(my $s_client = $s_server->accept()) {
 				last CLIENT;
 			}
 			
-			print Dumper($agent);
-		
 			# connect to agent
 			eval {
 				$agent->{sock} = worker_connect (
@@ -222,7 +223,7 @@ while(my $s_client = $s_server->accept()) {
 			eval {
 				$agent->{response} = worker_send (
 					sock    => $agent->{sock}, 
-					request => \@request
+					request => $request
 				);
 			}
 			or do {
@@ -300,6 +301,7 @@ while(my $s_client = $s_server->accept()) {
 close($s_server);
 close STDOUT;
 close STDERR;
+exit;
 
 sub worker_connect {
 	my $worker = { @_ };
