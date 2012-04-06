@@ -54,24 +54,35 @@ while(my $s_server = $s_agent->accept()) {
 	# buffering is lame
 	$s_server->autoflush(1);
 
-	my ($client, $request, $response);
+	my ($client, $response);
 
-	CLIENT:
+	SERVER:
         while(<$s_server>) {
                 chomp;
 		
 		# get json request and split into client info and request
 		eval {
-			($client, $request) = @{ $json->decode($_) };
+			$client = $json->decode($_);
 		} 
 		# parse error
 		or do {
 			$response = { status => 503, message => 'Cannot parse JSON' };
-			last CLIENT;
+			last SERVER;
 		};
 
+		# store request as array 
+		my @request = @{ $client->{request} };
+		delete $client->{request};
+
+		# check if requested service name is the same as agent's
+		my $request_service_name = shift @request;
+		if ($service_name ne $request_service_name) {
+			$response = { status => 503, message => "Wrong agent for service $service_name" };
+			last SERVER;
+		}
+		
 		# get command name	
-		my $command_name = shift @$request || 'list';
+		my $command_name = shift @request || 'list';
 		
 		# agent module name
 		$agent->{module} = 'Satan::' . ucfirst $service_name;
@@ -84,7 +95,7 @@ while(my $s_server = $s_agent->accept()) {
 		
 		# send command
 		if ($export_ok{$command_name}) {
-			$agent->{response} = $service->$command_name(@$request);
+			$agent->{response} = $service->$command_name(@request);
 		} 
 		else {
 			my $available_commands = join q{, }, sort keys %export_ok;
@@ -94,7 +105,7 @@ while(my $s_server = $s_agent->accept()) {
 			                 . "http://rootnode.net/satan/$service_name for details.";
 			
 			$response = { status => 400, message => $help_message };
-			last CLIENT;
+			last SERVER;
 		}
 		
 		# command finished successfully
