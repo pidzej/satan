@@ -30,6 +30,18 @@ $SIG{CHLD} = 'IGNORE';
 
 Readonly my $NGINX_MAP_FILE    => '/etc/nginx/conf.d/map.conf';
 Readonly my $CONTAINER_NETWORK => '10.1.0.0';
+Readonly my @export_ok => qw( add del list );
+
+sub get_data {
+        my $self = shift;
+        return $self->{data};
+}
+
+sub get_export {
+        my $self = shift;
+        my %export_ok = map { $_ => 1 } @export_ok;
+        return %export_ok;
+}
 
 sub new {
 	my $class = shift;
@@ -164,7 +176,7 @@ sub list {
 	# 1. sprawdz dns
 	# 2. sprawdz www
 
-	$self->{listing} = $listing;
+	$self->{data} = $listing;
 	return;
 }
 
@@ -189,13 +201,8 @@ sub help {
   satan vhost del domain.com
 END_OF_USAGE
 
-	$self->{listing} = $USAGE;
+	$self->{data} = $USAGE;
 	return;
-}
-
-sub get_data {
-	my $self = shift;
-	return $self->{listing} || '';
 }
 
 =mysql nginx 

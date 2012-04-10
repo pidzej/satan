@@ -70,6 +70,8 @@ while(my $s_server = $s_agent->accept()) {
 			last SERVER;
 		};
 
+		### Client: $client
+
 		# store request as array 
 		my @request = @{ $client->{request} };
 		delete $client->{request};
@@ -93,6 +95,9 @@ while(my $s_server = $s_agent->accept()) {
 		# get available command names
 		my %export_ok = $service->get_export;
 		
+
+		### Request: @request
+
 		# send command
 		if ($export_ok{$command_name}) {
 			$agent->{response} = $service->$command_name(@request);
