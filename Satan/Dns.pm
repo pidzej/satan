@@ -8,47 +8,59 @@
 #
 package Satan::Dns;
 
+use warnings;
+use strict;
 use Satan::Tools qw(caps);
 use IO::Socket;
 use DBI;
-use Data::Dumper;
 use Crypt::GeneratePassword qw(chars);
 use Data::Password qw(:all);
 use FindBin qw($Bin);
-use feature 'switch';
-use utf8;
-use warnings;
-use strict;
 use Data::Validate::Domain qw(is_domain is_hostname);
 use Data::Validate::IP qw(is_ipv4 is_ipv6);
+use Smart::Comments;
+use Readonly;
+use feature 'switch';
+use utf8;
 
-use constant {
-	DEFAULT_PRIO   => 10,
-	DEFAULT_TTL    => 300,
-	DEFAULT_SOA    => 'ns1.rootnode.net hostmaster.rootnode.net',
-	DEFAULT_NS1    => 'ns1.rootnode.net',
-	DEFAULT_NS2    => 'ns2.rootnode.net',
-	DEFAULT_MX1    => 'mail1.rootnode.net',
-	DEFAULT_MX2    => 'mail2.rootnode.net',
-	SOA_SERIAL     => 666,
-	SOA_REFRESH    => 10800, 
-	SOA_RETRY      => 3600,  
-	SOA_EXPIRE     => 604800,
-	SOA_MIN_TTL    => 300,
-	GMAIL_MX1      => 'ASPMX.L.GOOGLE.COM',
-	GMAIL_MX2      => 'ALT1.ASPMX.L.GOOGLE.COM',
-	GMAIL_MX3      => 'ALT2.ASPMX.L.GOOGLE.COM',
-	GMAIL_MX4      => 'ASPMX2.GOOGLEMAIL.COM',
-	GMAIL_MX5      => 'ASPMX3.GOOGLEMAIL.COM',
-	GMAIL_MX1_PRIO => 1,
-	GMAIL_MX2_PRIO => 5,
-	GMAIL_MX3_PRIO => 5,
-	GMAIL_MX4_PRIO => 10,
-	GMAIL_MX5_PRIO => 10,
-};
+# configuration
+Readonly my $DEFAULT_PRIO   => 10,
+Readonly my $DEFAULT_TTL    => 300,
+Readonly my $DEFAULT_SOA    => 'ns1.rootnode.net hostmaster.rootnode.net',
+Readonly my $DEFAULT_NS1    => 'ns1.rootnode.net',
+Readonly my $DEFAULT_NS2    => 'ns2.rootnode.net',
+Readonly my $DEFAULT_MX1    => 'mail1.rootnode.net',
+Readonly my $DEFAULT_MX2    => 'mail2.rootnode.net',
+Readonly my $SOA_SERIAL     => 666,
+Readonly my $SOA_REFRESH    => 10800, 
+Readonly my $SOA_RETRY      => 3600,  
+Readonly my $SOA_EXPIRE     => 604800,
+Readonly my $SOA_MIN_TTL    => 300,
+Readonly my $GMAIL_MX1      => 'ASPMX.L.GOOGLE.COM',
+Readonly my $GMAIL_MX2      => 'ALT1.ASPMX.L.GOOGLE.COM',
+Readonly my $GMAIL_MX3      => 'ALT2.ASPMX.L.GOOGLE.COM',
+Readonly my $GMAIL_MX4      => 'ASPMX2.GOOGLEMAIL.COM',
+Readonly my $GMAIL_MX5      => 'ASPMX3.GOOGLEMAIL.COM',
+Readonly my $GMAIL_MX1_PRIO => 1,
+Readonly my $GMAIL_MX2_PRIO => 5,
+Readonly my $GMAIL_MX3_PRIO => 5,
+Readonly my $GMAIL_MX4_PRIO => 10,
+Readonly my $GMAIL_MX5_PRIO => 10,
+Readonly my @export_ok => qw( add del list help );
 
 $|++;
 $SIG{CHLD} = 'IGNORE';
+
+sub get_data {
+        my $self = shift;
+        return $self->{data};
+}
+
+sub get_export {
+        my $self = shift;
+        my %export_ok = map { $_ => 1 } @export_ok;
+        return %export_ok;
+}
 
 sub new {
 	my $class = shift;
@@ -128,18 +140,18 @@ sub add {
 		$domain_id = $dbh->{mysql_insertid};
 		
 		# add basic records
-		my $soa_record = join(' ', DEFAULT_SOA, SOA_SERIAL, SOA_REFRESH, SOA_RETRY, SOA_EXPIRE, SOA_MIN_TTL);
-		$self->{dns_add_record}->execute($domain_id, $domain_name, 'SOA', $soa_record, DEFAULT_TTL, undef);
-		$self->{dns_add_record}->execute($domain_id, $domain_name, 'NS', DEFAULT_NS1, DEFAULT_TTL, undef);
-		$self->{dns_add_record}->execute($domain_id, $domain_name, 'NS', DEFAULT_NS2, DEFAULT_TTL, undef);
+		my $soa_record = join(' ', $DEFAULT_SOA, $SOA_SERIAL, $SOA_REFRESH, $SOA_RETRY, $SOA_EXPIRE, $SOA_MIN_TTL);
+		$self->{dns_add_record}->execute($domain_id, $domain_name, 'SOA', $soa_record, $DEFAULT_TTL, undef);
+		$self->{dns_add_record}->execute($domain_id, $domain_name, 'NS', $DEFAULT_NS1, $DEFAULT_TTL, undef);
+		$self->{dns_add_record}->execute($domain_id, $domain_name, 'NS', $DEFAULT_NS2, $DEFAULT_TTL, undef);
 
 		my $ipaddr = shift @args || '';
 		if ($ipaddr) {
 			if (is_ipv4($ipaddr)) {
-				$self->{dns_add_record}->execute($domain_id, $domain_name, 'A', $ipaddr, DEFAULT_TTL, undef);
+				$self->{dns_add_record}->execute($domain_id, $domain_name, 'A', $ipaddr, $DEFAULT_TTL, undef);
 			} 
 			elsif (is_ipv6($ipaddr)) {
-				$self->{dns_add_record}->execute($domain_id, $domain_name, 'AAAA', $ipaddr, DEFAULT_TTL, undef);
+				$self->{dns_add_record}->execute($domain_id, $domain_name, 'AAAA', $ipaddr, $DEFAULT_TTL, undef);
 			} 
 			elsif ($ipaddr =~ /^(a|aaaa|cname|mx|txt|srv|soa|ns|ptr)$/i) {
 				# probably a typo in domain name
@@ -152,7 +164,7 @@ sub add {
 			else {
 				return "IP \033[1m$ipaddr\033[0m is NOT a proper IP address. Some basic records not added."; 
 			}
-			$self->{dns_add_record}->execute($domain_id, "*.$domain_name", 'CNAME', $domain_name, DEFAULT_TTL, undef);
+			$self->{dns_add_record}->execute($domain_id, "*.$domain_name", 'CNAME', $domain_name, $DEFAULT_TTL, undef);
 		}
 
 		# add mx
@@ -162,17 +174,17 @@ sub add {
 		} 
 		elsif ($mail eq 'gmail') {
 			# gmail mx
-			$self->{dns_add_record}->execute($domain_id, "mail.$domain_name", 'CNAME', 'ghs.google.com', DEFAULT_TTL, undef);
-			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', GMAIL_MX1, DEFAULT_TTL, GMAIL_MX1_PRIO);
-			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', GMAIL_MX2, DEFAULT_TTL, GMAIL_MX2_PRIO);
-			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', GMAIL_MX3, DEFAULT_TTL, GMAIL_MX3_PRIO);
-			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', GMAIL_MX4, DEFAULT_TTL, GMAIL_MX4_PRIO);
-			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', GMAIL_MX5, DEFAULT_TTL, GMAIL_MX5_PRIO);
+			$self->{dns_add_record}->execute($domain_id, "mail.$domain_name", 'CNAME', 'ghs.google.com', $DEFAULT_TTL, undef);
+			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', $GMAIL_MX1, $DEFAULT_TTL, $GMAIL_MX1_PRIO);
+			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', $GMAIL_MX2, $DEFAULT_TTL, $GMAIL_MX2_PRIO);
+			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', $GMAIL_MX3, $DEFAULT_TTL, $GMAIL_MX3_PRIO);
+			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', $GMAIL_MX4, $DEFAULT_TTL, $GMAIL_MX4_PRIO);
+			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', $GMAIL_MX5, $DEFAULT_TTL, $GMAIL_MX5_PRIO);
 		}
 		elsif ($mail eq '') {
 			# rootnode mx
-			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', DEFAULT_MX1, DEFAULT_TTL, DEFAULT_PRIO);
-			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', DEFAULT_MX2, DEFAULT_TTL, DEFAULT_PRIO);
+			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', $DEFAULT_MX1, $DEFAULT_TTL, $DEFAULT_PRIO);
+			$self->{dns_add_record}->execute($domain_id, $domain_name, 'MX', $DEFAULT_MX2, $DEFAULT_TTL, $DEFAULT_PRIO);
 		} 
 		else {
 			return "Option \033[1m$mail\033[0m NOT recognized. Some basic records not added.";
@@ -182,7 +194,7 @@ sub add {
 	}
 
 	# subroutines for record type
-	sub _get_record_name {
+	sub get_record_name {
 		my($host_name,$domain_name) = @_;
 		($host_name and $domain_name) or die "Not enough parameters in get_record_name sub.";
 
@@ -200,7 +212,7 @@ sub add {
 		return $record_name;
 	}
 	
-	sub _check_host_name {
+	sub check_host_name {
 		my($host_name) = @_;
 		($host_name) or die "Not enough parameters in check_host_name sub.";
 
@@ -218,14 +230,14 @@ sub add {
 		return; # success
 	}
 	
-	my($record_ttl, $record_prio) = (DEFAULT_TTL, undef);
+	my($record_ttl, $record_prio) = ($DEFAULT_TTL, undef);
 
 	my $host_name = shift @args or return "Not enough arguments! \033[1mHost name\033[0m NOT specified. Please die or read help.";
 	   $host_name = lc $host_name;
-	my $check_host_name = _check_host_name($host_name);
+	my $check_host_name = check_host_name($host_name);
 	   $check_host_name and return $check_host_name;
 
-	my $record_name = _get_record_name($host_name, $domain_name);
+	my $record_name = get_record_name($host_name, $domain_name);
 	my $record_content;
 
 	given($record_type) {
@@ -251,7 +263,7 @@ sub add {
 			$record_content = lc $record_content;
 			is_hostname($record_content) or return "Domain \033[1m$record_content\033[0m is NOT a proper domain name.";
 
-			$record_prio = shift @args || DEFAULT_PRIO;
+			$record_prio = shift @args || $DEFAULT_PRIO;
 			$record_prio =~ /^([^0]\d*|0)$/ or return "Priority \033[1m$record_prio\033[0m must be a number! Try again.";
 			$record_prio > 65535           and return "Priority \033[1m$record_prio\033[0m too high! Up in smoke.";
 		}
@@ -296,7 +308,7 @@ sub add {
 			   $soa_mail =~ s/@/\./;
 			is_domain($soa_mail) or return "Mail \033[1m$soa_mail\033[0m is NOT a proper domain name.";
 
-			$record_content = join(' ', $soa_ns, $soa_mail, SOA_SERIAL, SOA_REFRESH, SOA_RETRY, SOA_EXPIRE, SOA_MIN_TTL);
+			$record_content = join(' ', $soa_ns, $soa_mail, $SOA_SERIAL, $SOA_REFRESH, $SOA_RETRY, $SOA_EXPIRE, $SOA_MIN_TTL);
 		}
 		when(/^(ns|ptr)$/) {
 			# satan dns add domain.com ns <host> <domain>
@@ -413,7 +425,7 @@ sub list {
 			return "Domain \033[1m$domain_name\033[0m does NOT exist! Please double check the name.";
 		}
 	}
-	$self->{listing} = $listing;	
+	$self->{data} = $listing;	
 	return;
 }
 
@@ -464,13 +476,8 @@ sub help {
   satan dns del domain.com
 END_OF_USAGE
 
-	$self->{listing} = $USAGE;
+	$self->{data} = $USAGE;
 	return;
-}
-
-sub _get_data {
-	my $self = shift;
-	return $self->{listing} || '';
 }
 
 =mysql backend pdns

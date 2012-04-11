@@ -28,31 +28,32 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
 # SUCH DAMAGE.
 #
-use IO::Socket;
-use IO::Socket::Socks;
-use DBI;
-use Data::Dumper;
-use JSON::XS;
-use YAML qw(LoadFile);
-use FindBin qw($Bin); 
-use Readonly;
-use List::MoreUtils qw(any);
-use Smart::Comments;
-use feature 'switch';
 use warnings;
 use strict;
+use DBI;
+use JSON::XS;
+use Readonly;
+use YAML qw(LoadFile);
+use FindBin qw($Bin); 
+use IO::Socket;
+use IO::Socket::Socks;
+use Smart::Comments;
+#use lib $Bin;
 
-use lib $Bin;
-
-$|++;
+$|++; 
 $SIG{CHLD} = 'IGNORE'; # braaaaains!!
 
-my $json       = JSON::XS->new->utf8;
+# configuration
 my $agent_conf = YAML::LoadFile("$Bin/../config/agent.yaml");
 my $exec_conf  = YAML::LoadFile("$Bin/../config/exec.yaml");
-
+Readonly my $SATAN_HOST => '0.0.0.0';
+Readonly my $SATAN_PORT => 1600;
 Readonly my $PROXY_PORT => 1605;
 
+# json serialization
+my $json = JSON::XS->new->utf8;
+
+# usage
 my $satan_services = join(q[ ], sort grep { $_ ne 'admin' } keys %$agent_conf);
 Readonly my $USAGE => <<"END_USAGE";
 \033[1mSatan - the most hellish service manager\033[0m
@@ -66,15 +67,17 @@ For additional information visit http://rootnode.net
 Bug reporting on mailing list.
 END_USAGE
 
+# open logs
 if (!@ARGV) {
 	umask 0077;
 	open STDOUT,">>","$Bin/../logs/access.log";
 	open STDERR,">>","$Bin/../logs/error.log";
 }
 
-my $s_server = new IO::Socket::INET (
-        LocalAddr => '0.0.0.0',
-        LocalPort => 1600,
+# create socket
+my $s_server = IO::Socket::INET->new(
+        LocalAddr => $SATAN_HOST,
+        LocalPort => $SATAN_PORT,
         Proto     => 'tcp',
         Listen    => 100,
         ReuseAddr => 1,
@@ -87,24 +90,30 @@ $dbh->{mysql_enable_utf8}    = 1;
 
 # db statements
 my $db;
-$db->{get_user_credentials}  = $dbh->prepare("SELECT user_name        FROM user_auth  WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
-$db->{get_admin_credentials} = $dbh->prepare("SELECT user_name, privs FROM admin_auth WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
-
-$db->{get_server_name} = $dbh->prepare("SELECT id, server_name FROM server_list WHERE ip_address=?");  
+$db->{get_user_credentials}  = $dbh->prepare("SELECT user_name        FROM user_auth   WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
+$db->{get_admin_credentials} = $dbh->prepare("SELECT user_name, privs FROM admin_auth  WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
+$db->{get_server_name}       = $dbh->prepare("SELECT id, server_name  FROM server_list WHERE id=?");  
 
 while(my $s_client = $s_server->accept()) {
 	$s_client->autoflush(1);
         if(fork() == 0) {
-		my ($client, $agent, $exec, $request, $response);
+		my ($client, $agent, $exec, $response);
 
 		# client ip
 		$client->{ipaddr} = $s_client->peerhost;
 
-		# server name
-		$db->{get_server_name}->execute($client->{ipaddr});
-		( $client->{server_id}, $client->{server_name} ) = $db->{get_server_name}->fetchrow_array;
+		### client ip: $client->{ipaddr}
 
-		print Dumper($client);
+		# check server name
+		if ($client->{ipaddr} =~ /^127\.16\.\d+\.(\d+)$/) {
+			my $server_id = $1;
+			$db->{get_server_name}->execute($server_id);
+			( $client->{server_id}, $client->{server_name} ) = $db->{get_server_name}->fetchrow_array;
+		} 
+		else {
+			$response = { status => 400, message => "Request came from unknown server ($client->{ipaddr})." };
+			goto TERMINATE;
+		}
 
 		CLIENT:
                 while(<$s_client>) {
@@ -113,29 +122,28 @@ while(my $s_client = $s_server->accept()) {
 
 			# check server name
 			#if (!$client->{server_name}) {
-			#	$response = { status => 400, message => "Request came from unknown server ($client->{ipaddr})" };
-			#	last CLIENT;	
 			#}
 	
 			if(/^\[.*\]$/) { 
 				# json input
 				eval { 	
-					$request = $json->decode($_);
-					print Dumper($request);
+					$client->{request} = $json->decode($_);
 				} or do {
-					$response = { status => 405, message => 'Bad request. Cannot parse JSON' };
+					$response = { status => 405, message => 'Bad request. Cannot parse JSON.' };
 					last CLIENT;
 				}
 			} 
 			else { 
 				# plain text input
-				$request = [ split(/\s/) ];
+				$client->{request} = [ split(/\s/) ];
 			}
+
+			### Client request: $client
 
 			# client authentication
 			if(! $client->{is_auth}) {
 				# get uid and key from request
-				($client->{uid}, $client->{key}) = @$request;
+				($client->{uid}, $client->{key}) = @{ $client->{request} };
 
 				# special privileges for uids < 1000
 				$client->{type} = $client->{uid} < 1000 ? 'admin' : 'user';
@@ -148,13 +156,15 @@ while(my $s_client = $s_server->accept()) {
 				if($db->{$cred_query}->rows) {
 					# user is authenticated
 					$client->{is_auth} = 1;
+
+					# drop client key
 					delete $client->{key};
 			
 					# get user name and privs 
 					( $client->{user_name}, $client->{privs} )  = $db->{$cred_query}->fetchrow_array;
 				} 
 				else {
-					$response = { status => 401, message => 'Unauthorized' };
+					$response = { status => 401, message => 'Unauthorized.' };
 					last CLIENT;
 				}
 				$response = { status => 0, message => 'OK' };
@@ -163,10 +173,10 @@ while(my $s_client = $s_server->accept()) {
 			}
 			
 			# get service name
-			my $service_name = shift @$request || 'help';
+			my $service_name = $client->{request}->[0] || 'help';
 
 			# get command name
-			my $command_name = $request->[0] || '';
+			my $command_name = $client->{request}->[1] || '';
 			
  			# display usage
 			if ($service_name eq 'help' or $service_name eq '?') {
@@ -180,12 +190,9 @@ while(my $s_client = $s_server->accept()) {
 				my @privs = split /,/, $client->{privs};  # store as array
 				my %privs = map { $_ => 1 } @privs;       # store as hash
 
-				### $command_name
-				### $service_name				
-
 				# check if privileged
 				if (not defined $privs{$command_name} or $service_name ne 'admin') { 
-					$response = { status => 401, message => 'Unauthorized' };
+					$response = { status => 401, message => 'Unauthorized.' };
 					last CLIENT;
 				}				
 			} else {
@@ -193,19 +200,17 @@ while(my $s_client = $s_server->accept()) {
 				delete $agent_conf->{admin};
 			}		
 			
-			# push client info into request;
-			$request = [ $client, $request ];
-			
-			print Dumper($request);
-
 			# get agent configuration
-			$agent = $agent_conf->{$service_name};
-
+			if ($agent = $agent_conf->{$service_name}) {
+				$agent->{request} = $client;
+			} 
 			# throw error if agent does not exist
-			if (!$agent) {
+			else {
 				$response = { status => 405, message => "Service \033[1m$service_name\033[0m NOT found. Available services are: \033[1;32m$satan_services\033[0m" };
 				last CLIENT;
 			}
+
+			### Agent: $agent			
 			
 			# connect to agent
 			eval {
@@ -223,7 +228,7 @@ while(my $s_client = $s_server->accept()) {
 			eval {
 				$agent->{response} = worker_send (
 					sock    => $agent->{sock}, 
-					request => $request
+					request => $agent->{request}
 				);
 			}
 			or do {
@@ -231,7 +236,7 @@ while(my $s_client = $s_server->accept()) {
 				last CLIENT;
 			};
 			
-			print "AGENT RESPONSE:\n" . Dumper($agent->{response});
+			### Agent response: $agent->{response}
 			
 			# agent reports user error
 			if ($agent->{response}->{status}) {
@@ -260,7 +265,7 @@ while(my $s_client = $s_server->accept()) {
 					$response->{message} = "Could not connect to container \033[1m" . $container_id . "\033[0m.\n\033[1;31mSome operations performed partially!\033[0m";
 				};
 
-				# prepare request for executor			
+				# prepare request for executor	
 				$exec->{request} = $client->{request};
 					
 				# add exec key and client uid to exec request
@@ -291,11 +296,11 @@ while(my $s_client = $s_server->accept()) {
 
 		} # while $s_client
 		
-		# send status
+		TERMINATE:
 		print $s_client $json->encode($response);
 		close($s_client);
 		exit;
-	}
+	} # fork end
 }
 
 close($s_server);
@@ -360,17 +365,6 @@ sub worker_send {
 	return $json->decode($worker->{response});
 }
 
-=satan admin
-
-satan admin pam add
-satan admin satan add
-satan admin 
-
-satan admin add
-satan admin del
-satan admin passwd
-satan admin pay
-
 =schema
 CREATE TABLE user_auth (
 	uid SMALLINT UNSIGNED NOT NULL,
@@ -394,4 +388,3 @@ CREATE TABLE server_list (
 	PRIMARY KEY(id),
 	KEY(ip_address)
 ) ENGINE=InnoDB, CHARACTER SET=UTF8;
-

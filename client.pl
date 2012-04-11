@@ -16,9 +16,9 @@ use Readonly;
 use Data::Dumper;
 
 # configuration
-Readonly my $SATAN_ADDR => '10.1.0.6';
-Readonly my $SATAN_PORT => 1600;
-Readonly my $SATAN_KEY  => 'satan.key';
+Readonly my $SATAN_ADDR => '127.0.0.1';
+Readonly my $SATAN_PORT => '666';
+Readonly my $SATAN_KEY  => '/home/satan.key';
 
 # options
 my ($opt_key, $opt_debug, $opt_verbose, $opt_help);
@@ -94,7 +94,7 @@ sub request {
 	print $s_client $json_request;
 
 	# get response
-	my $json_response = scalar <$s_client>;
+	my $json_response = scalar <$s_client> or die "Could not connect to Satan!\n";
 	chomp $json_response;
 
 	# decode json
@@ -129,7 +129,7 @@ sub request {
 }
 
 # get command name
-my $command_name = $ARGV[0];
+my $command_name = $ARGV[0] || 'help';
 
 # authenticate
 auth($opt_key || $SATAN_KEY);

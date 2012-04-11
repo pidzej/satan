@@ -32,8 +32,10 @@ $MINLEN = 8;
 $MAXLEN = 20;
 
 # configuration
-Readonly my $MIN_UID => 2000;
-Readonly my $MAX_UID => 6500;
+Readonly my $MIN_UID          => 2000;
+Readonly my $MAX_UID          => 6500;
+Readonly my $USER_GROUP_GID   => 100;
+Readonly my $USER_GROUP_NAME  => 'users';
 Readonly my $USER_PASS_MINLEN =>  8;
 Readonly my $USER_PASS_MAXLEN => 12;
 Readonly my $PAM_PASS_MINLEN  => 14;
@@ -190,10 +192,15 @@ sub adduser {
 		$db->{pam}->{add_user}->execute($uid, $uid, $user_name, $user_name, $user_password_crypt, "/home/$user_name", $uid);
 		my $user_id = $db->{pam}->{dbh}->{mysql_insertid};
 
-		## group
+		## username group
 		$db->{pam}->{add_group}->execute($uid, $user_name, $uid);
-		my $group_id = $db->{pam}->{dbh}->{mysql_insertid};
-		$db->{pam}->{add_user_group}->execute($user_id, $group_id, $uid);
+		my $username_group_id = $db->{pam}->{dbh}->{mysql_insertid};
+		$db->{pam}->{add_user_group}->execute($user_id, $username_group_id, $uid);
+	
+		## user group
+		$db->{pam}->{add_group}->execute($USER_GROUP_GID, $USER_GROUP_NAME, $uid);
+		my $user_group_id = $db->{pam}->{dbh}->{mysql_insertid};
+		$db->{pam}->{add_user_group}->execute($user_id, $user_group_id, $uid);
 		
 		## grants
 		$db->{pam}->{grant_passwd_user}->execute("$uid-passwd", $pam_passwd);
