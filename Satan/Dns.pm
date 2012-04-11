@@ -24,28 +24,28 @@ use feature 'switch';
 use utf8;
 
 # configuration
-Readonly my $DEFAULT_PRIO   => 10,
-Readonly my $DEFAULT_TTL    => 300,
-Readonly my $DEFAULT_SOA    => 'ns1.rootnode.net hostmaster.rootnode.net',
-Readonly my $DEFAULT_NS1    => 'ns1.rootnode.net',
-Readonly my $DEFAULT_NS2    => 'ns2.rootnode.net',
-Readonly my $DEFAULT_MX1    => 'mail1.rootnode.net',
-Readonly my $DEFAULT_MX2    => 'mail2.rootnode.net',
-Readonly my $SOA_SERIAL     => 666,
-Readonly my $SOA_REFRESH    => 10800, 
-Readonly my $SOA_RETRY      => 3600,  
-Readonly my $SOA_EXPIRE     => 604800,
-Readonly my $SOA_MIN_TTL    => 300,
-Readonly my $GMAIL_MX1      => 'ASPMX.L.GOOGLE.COM',
-Readonly my $GMAIL_MX2      => 'ALT1.ASPMX.L.GOOGLE.COM',
-Readonly my $GMAIL_MX3      => 'ALT2.ASPMX.L.GOOGLE.COM',
-Readonly my $GMAIL_MX4      => 'ASPMX2.GOOGLEMAIL.COM',
-Readonly my $GMAIL_MX5      => 'ASPMX3.GOOGLEMAIL.COM',
-Readonly my $GMAIL_MX1_PRIO => 1,
-Readonly my $GMAIL_MX2_PRIO => 5,
-Readonly my $GMAIL_MX3_PRIO => 5,
-Readonly my $GMAIL_MX4_PRIO => 10,
-Readonly my $GMAIL_MX5_PRIO => 10,
+Readonly my $DEFAULT_PRIO   => 10;
+Readonly my $DEFAULT_TTL    => 300;
+Readonly my $DEFAULT_SOA    => 'ns1.rootnode.net hostmaster.rootnode.net';
+Readonly my $DEFAULT_NS1    => 'ns1.rootnode.net';
+Readonly my $DEFAULT_NS2    => 'ns2.rootnode.net';
+Readonly my $DEFAULT_MX1    => 'mail1.rootnode.net';
+Readonly my $DEFAULT_MX2    => 'mail2.rootnode.net';
+Readonly my $SOA_SERIAL     => 666;
+Readonly my $SOA_REFRESH    => 10800; 
+Readonly my $SOA_RETRY      => 3600;  
+Readonly my $SOA_EXPIRE     => 604800;
+Readonly my $SOA_MIN_TTL    => 300;
+Readonly my $GMAIL_MX1      => 'ASPMX.L.GOOGLE.COM';
+Readonly my $GMAIL_MX2      => 'ALT1.ASPMX.L.GOOGLE.COM';
+Readonly my $GMAIL_MX3      => 'ALT2.ASPMX.L.GOOGLE.COM';
+Readonly my $GMAIL_MX4      => 'ASPMX2.GOOGLEMAIL.COM';
+Readonly my $GMAIL_MX5      => 'ASPMX3.GOOGLEMAIL.COM';
+Readonly my $GMAIL_MX1_PRIO => 1;
+Readonly my $GMAIL_MX2_PRIO => 5;
+Readonly my $GMAIL_MX3_PRIO => 5;
+Readonly my $GMAIL_MX4_PRIO => 10;
+Readonly my $GMAIL_MX5_PRIO => 10;
 Readonly my @export_ok => qw( add del list help );
 
 $|++;
