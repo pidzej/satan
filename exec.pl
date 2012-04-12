@@ -16,6 +16,7 @@ use File::Path qw(make_path remove_tree);
 use File::Copy;
 use File::Slurp;
 use IO::Socket;
+use Digest::MD5 qw(md5_base64);
 use Readonly;
 use Smart::Comments;
 
@@ -45,8 +46,6 @@ open my $fh, '<', $EXEC_KEY or die "Cannot open key file ($EXEC_KEY).\n";
 my (undef, $exec_key) = split /\s+/, <$fh>;
 chomp $exec_key;
 $exec_key = md5_base64($exec_key);
-
-print "exec_key: $exec_key";
 
 while (my $s_server = $s_exec->accept()) {
 	$s_server->autoflush(1);
