@@ -119,11 +119,12 @@ sub listing {
 
 	my $self = shift;
 	my $param = { @_ };
-	my $db      = $param->{db};
-	my $title   = $param->{title};
-	my @header  = @{$param->{header}};
-	my @columns = @{$param->{columns}};
-	my %empty   = %{$param->{empty}} if defined $param->{empty};
+	my $db         = $param->{db};
+	my $title      = $param->{title};
+	my @header     = @{$param->{header}};
+	my @columns    = @{$param->{columns}};
+	my %empty      = %{$param->{empty}} if defined $param->{empty};
+	my $empty_sign = $param->{empty_sign} || '-';
 
 	my %map_names = map { $columns[$_] => $header[$_] } (0..$#header);
 	my $rows = $db->rows;
@@ -141,7 +142,7 @@ sub listing {
 			} elsif(defined $empty{$_}) {
 				$_ => $empty{$_};
 			} else {
-				 $_ => '-';
+				 $_ => $empty_sign;
 			}
 		} keys %$ref;
 		

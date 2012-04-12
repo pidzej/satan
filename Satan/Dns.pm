@@ -77,14 +77,15 @@ sub new {
 	$self->{dns_list_domains}    = $dbh->prepare("
 		SELECT 
 			name,
-			SUM(CASE type WHEN 'SOA'         THEN count ELSE 0 END) AS SOA,
-			SUM(CASE type WHEN 'NS'          THEN count ELSE 0 END) AS NS,
-			SUM(CASE type WHEN 'A' OR 'AAAA' THEN count ELSE 0 END) AS A, 
-			SUM(CASE type WHEN 'CNAME'       THEN count ELSE 0 END) AS CNAME,
-			SUM(CASE type WHEN 'MX'          THEN count ELSE 0 END) AS MX,
-			SUM(CASE type WHEN 'TXT'         THEN count ELSE 0 END) AS TXT,
-			SUM(CASE type WHEN 'SRV'         THEN count ELSE 0 END) AS SRV
-			 
+			SUM(CASE WHEN type = 'SOA'   THEN count ELSE NULL END) AS SOA,
+			SUM(CASE WHEN type = 'NS'    THEN count ELSE NULL END) AS NS,
+			SUM(CASE WHEN type = 'A'     THEN count ELSE NULL END) AS A, 
+			SUM(CASE WHEN type = 'AAAA'  THEN count ELSE NULL END) AS AAAA, 
+			SUM(CASE WHEN type = 'CNAME' THEN count ELSE NULL END) AS CNAME,
+			SUM(CASE WHEN type = 'MX'    THEN count ELSE NULL END) AS MX,
+			SUM(CASE WHEN type = 'TXT'   THEN count ELSE NULL END) AS TXT,
+			SUM(CASE WHEN type = 'SRV'   THEN count ELSE NULL END) AS SRV,
+			SUM(CASE WHEN type = 'PTR'   THEN count ELSE NULL END) AS PTR
 		FROM (
 			SELECT d.name AS name,r.type AS type,count(r.type) AS count 
 			FROM domains d LEFT JOIN records r ON d.id=r.domain_id 
@@ -400,8 +401,8 @@ sub list {
 		$listing = Satan::Tools->listing(
 			db      => $dns_list_domains,
 			title   => "Domains",
-			header  => ['Name','SOA','NS','A','CNAME','MX','TXT','SRV'],
-			columns => [ qw(name SOA NS A CNAME MX TXT SRV) ],
+			header  => ['Name','SOA','NS','A','AAAA','CNAME','MX','TXT','SRV','PTR'],
+			columns => [ qw(name SOA NS A AAAA CNAME MX TXT SRV PTR) ],
 		) || "No domains.";
 	} else {
 		$domain_name = lc $domain_name;
