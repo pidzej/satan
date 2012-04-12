@@ -14,9 +14,9 @@ use Rootnode::Password;
 use DBI;
 use Data::Dumper;
 use Smart::Comments;
-use Crypt::GeneratePassword qw(chars word);
-use Data::Password qw(:all);
-use Crypt::PasswdMD5 ;
+use Data::Password qw(IsBadPassword);
+use Crypt::PasswdMD5;
+use Digest::MD5 qw(md5_base64);
 use FindBin qw($Bin);
 use Readonly;
 use feature 'switch';
@@ -27,22 +27,22 @@ use strict;
 $|++;
 $SIG{CHLD} = 'IGNORE';
 
-# Data::Password variables
-$MINLEN = 8;
-$MAXLEN = 20;
-
 # configuration
 Readonly my $MIN_UID          => 2000;
 Readonly my $MAX_UID          => 6500;
 Readonly my $USER_GROUP_GID   => 100;
 Readonly my $USER_GROUP_NAME  => 'users';
-Readonly my $USER_PASS_MINLEN =>  8;
-Readonly my $USER_PASS_MAXLEN => 12;
-Readonly my $PAM_PASS_MINLEN  => 14;
-Readonly my $PAM_PASS_MAXLEN  => 18;
+Readonly my $USER_PASSWORD_MINLEN =>  8;
+Readonly my $USER_PASSWORD_MAXLEN => 12;
+Readonly my $PAM_PASSWORD_MINLEN  => 14;
+Readonly my $PAM_PASSWORD_MAXLEN  => 18;
 Readonly my $SATAN_KEY_MINLEN => 14;
 Readonly my $SATAN_KEY_MAXLEN => 16;
 Readonly my @export_ok => qw( adduser deluser passwd );
+
+# Data::Password 
+my $MINLEN = undef;
+my $MAXLEN = undef;
 
 sub get_data {
         my $self = shift;
@@ -72,7 +72,7 @@ sub new {
 	$pam->{dbh} = DBI->connect("dbi:mysql:nss;mysql_read_default_file=$Bin/../config/my.pam.cnf",undef,undef,{ RaiseError => 1, AutoCommit => 0 });
 
 	# add
-	$pam->{add_user}       = $pam->{dbh}->prepare("INSERT INTO all_users(uid, gid, user_name, realname, password, status, homedir, lastchange, min, max, owner) VALUES(?, ?, ?, ?, ?, 'A', ?, '', $MINLEN, $MAXLEN, ?)"); 
+	$pam->{add_user}       = $pam->{dbh}->prepare("INSERT INTO all_users(uid, gid, user_name, realname, password, status, homedir, lastchange, min, max, owner) VALUES(?, ?, ?, ?, ?, 'A', ?, '', $USER_PASSWORD_MINLEN, $USER_PASSWORD_MAXLEN, ?)"); 
 	$pam->{add_group}      = $pam->{dbh}->prepare("REPLACE INTO all_groups(gid, group_name, owner)       VALUES (?, ?, ?)"); 
 	$pam->{add_user_group} = $pam->{dbh}->prepare("REPLACE INTO all_user_group(user_id, group_id, owner) VALUES (?, ?, ?)");
 	
@@ -105,7 +105,7 @@ sub adduser {
 	my $db = $self->{db};
 		
 	# SYNTAX
-	# satan admin adduser <user_name> [uid <uid>] [ user_password <password> ] [ satan_key <key> ] [ mail yes|no ]
+	# satan admin adduser <user_name> [uid <uid>] [ user_password <password> ] [ satan_key <key> ]
 
 	# get username
 	my $user_name = shift @args or return "Username not specified. Cannot proceed.";
@@ -144,12 +144,14 @@ sub adduser {
 	my $user_password_p = q{};
 
 	if (not defined $user_password) {
-		($user_password, $user_password_p) = apg($USER_PASS_MINLEN, $USER_PASS_MAXLEN, 'with_pronunciation');
+		($user_password, $user_password_p) = apg($USER_PASSWORD_MINLEN, $USER_PASSWORD_MAXLEN, 'with_pronunciation');
 	}
 	
 	# get satan key
 	my $satan_key = $value_of{satan_key} || apg($SATAN_KEY_MINLEN, $SATAN_KEY_MAXLEN);
-	
+
+	# compute exec key
+	my $exec_key = md5_base64($satan_key);
 
 	# crypt user password
 	my $user_password_crypt = crypt_password($user_password);
@@ -162,14 +164,14 @@ sub adduser {
 	   $bad_user_password and return "Satan password is too simple: $bad_satan_key.";
 
 	# pam passwords
-	my $pam_passwd = apg($PAM_PASS_MINLEN, $PAM_PASS_MAXLEN);
-	my $pam_shadow = apg($PAM_PASS_MINLEN, $PAM_PASS_MAXLEN);
+	my $pam_passwd = apg($PAM_PASSWORD_MINLEN, $PAM_PASSWORD_MAXLEN);
+	my $pam_shadow = apg($PAM_PASSWORD_MINLEN, $PAM_PASSWORD_MAXLEN);
 	
 	# check passwords
 	return 'Satan key is empty'     if not defined $satan_key     or length($satan_key)     < $SATAN_KEY_MINLEN;
-	return 'User password is empty' if not defined $user_password or length($user_password) < $USER_PASS_MINLEN; 
-	return 'Pam password is empty'  if not defined $pam_passwd    or length($pam_passwd)    < $PAM_PASS_MINLEN;
-	return 'Pam shadow is empty'    if not defined $pam_shadow    or length($pam_shadow)    < $PAM_PASS_MINLEN;
+	return 'User password is empty' if not defined $user_password or length($user_password) < $USER_PASSWORD_MINLEN; 
+	return 'Pam password is empty'  if not defined $pam_passwd    or length($pam_passwd)    < $PAM_PASSWORD_MINLEN;
+	return 'Pam shadow is empty'    if not defined $pam_shadow    or length($pam_shadow)    < $PAM_PASSWORD_MINLEN;
 
 	# check user in db
 	foreach my $type ( qw(pam satan) ) {
@@ -219,6 +221,7 @@ sub adduser {
 		user_password   => $user_password,
 		user_password_p => $user_password_p,
 		satan_key       => $satan_key,
+		exec_key        => $exec_key,
 		pam_passwd      => $pam_passwd,
 		pam_shadow      => $pam_shadow,
 	};
@@ -311,7 +314,7 @@ sub passwd {
 	my ($self, @args) = @_;
 	my $db = $self->{db};
 	
-	# satan admin satan passwd <user_name> [ user_password yes|<password> ] [ satan_key yes|<key> ] [ mail yes|no ]
+	# satan admin satan passwd <user_name> [ user_password yes|<password> ] [ satan_key yes|<key> ]
 	my $user_name = shift @args or return "Username not specified. Cannot proceed.";
 	   $user_name = lc $user_name;
 	
@@ -331,8 +334,8 @@ sub passwd {
 	# no arguments
 	if (not defined $value_of{user_password} and
 	    not defined $value_of{satan_key}) {
-		$value_of{user_password} = chars($MINLEN, $MAXLEN);
-		$value_of{satan_key}     = chars($MINLEN, $MAXLEN); 
+		$value_of{user_password} = apg($USER_PASSWORD_MINLEN, $USER_PASSWORD_MAXLEN);
+		$value_of{satan_key}     = apg($SATAN_KEY_MINLEN, $SATAN_KEY_MAXLEN); 
 	}
 
 	# db statements
@@ -340,12 +343,25 @@ sub passwd {
 		user_password  => 'pam',
 		satan_key      => 'satan'
 	);
+
+	# password length
+	my %password_minlen_for = (
+		user_password => $USER_PASSWORD_MINLEN,
+		satan_key     => $SATAN_KEY_MINLEN
+	);
 	
+	my %password_maxlen_for = (
+		user_password => $USER_PASSWORD_MAXLEN,
+		satan_key     => $SATAN_KEY_MAXLEN
+	);
+
 	foreach my $type ( qw(user_password satan_key) ) {
 		if (defined $value_of{$type}) {
 			# generate password if specified as 'yes'
 			if ($value_of{$type} eq 'yes') {
-				$value_of{$type} = chars($MINLEN, $MAXLEN);	
+				my $minlen = $password_minlen_for{$type};
+				my $maxlen = $password_maxlen_for{$type};
+				$value_of{$type} = apg($minlen, $maxlen);
 			} 
 
 			# check complexity of password

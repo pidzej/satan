@@ -24,7 +24,7 @@ $SIG{CHLD} = 'IGNORE'; # braaaaains!!!
 
 Readonly my $EXEC_HOST => '127.0.0.1';
 Readonly my $EXEC_PORT => '999';
-Readonly my $EXEC_KEY  => '/home/satan/exec.key';
+Readonly my $EXEC_KEY  => '/home/satan/key';
 Readonly my $TEMPLATE_DIR => '/usr/satan/templates';
 
 # json serialization
@@ -39,11 +39,14 @@ my $s_exec = IO::Socket::INET->new(
         ReuseAddr => 1,
 ) or die "Cannot create socket! $!\n";
 
-# open key file
+# get exec key
 -f $EXEC_KEY or die "Cannot find key file ($EXEC_KEY).\n";
 open my $fh, '<', $EXEC_KEY or die "Cannot open key file ($EXEC_KEY).\n";
-my $exec_key = <$fh>;
+my (undef, $exec_key) = split /\s+/, <$fh>;
 chomp $exec_key;
+$exec_key = md5_base64($exec_key);
+
+print "exec_key: $exec_key";
 
 while (my $s_server = $s_exec->accept()) {
 	$s_server->autoflush(1);

@@ -37,6 +37,7 @@ use YAML qw(LoadFile);
 use FindBin qw($Bin); 
 use IO::Socket;
 use IO::Socket::Socks;
+use Digest::MD5 qw(md5_base64);
 use Smart::Comments;
 #use lib $Bin;
 
@@ -157,6 +158,9 @@ while(my $s_client = $s_server->accept()) {
 					# user is authenticated
 					$client->{is_auth} = 1;
 
+					# compute exec key
+					$exec->{key} = md5_base64($client->{key});
+
 					# drop client key
 					delete $client->{key};
 			
@@ -269,7 +273,7 @@ while(my $s_client = $s_server->accept()) {
 				$exec->{request} = $client->{request};
 					
 				# add exec key and client uid to exec request
-				unshift @{ $exec->{request} }, $exec_conf->{key}, $client->{uid};
+				unshift @{ $exec->{request} }, $exec->{key}, $client->{uid};
 
 				# send data to executor	
 				eval {
