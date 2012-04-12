@@ -177,7 +177,7 @@ while(my $s_client = $s_server->accept()) {
 
 			# get command name
 			my $command_name = $client->{request}->[1] || '';
-			
+
  			# display usage
 			if ($service_name eq 'help' or $service_name eq '?') {
 				$response = { status => 0, message => 'OK', data => $USAGE };
