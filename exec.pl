@@ -178,7 +178,7 @@ sub vhost_del {
 	}
 
 	# nginx config
-	my $nginx_config_file = "/etc/nginx/sites_enabled/$vhost_name";
+	my $nginx_config_file = "/etc/nginx/sites-enabled/$vhost_name";
 	if (-l $nginx_config_file) {
 		unlink $nginx_config_file;
 	}
