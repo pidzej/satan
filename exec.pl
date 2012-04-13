@@ -25,7 +25,7 @@ $SIG{CHLD} = 'IGNORE'; # braaaaains!!!
 
 Readonly my $EXEC_HOST => '127.0.0.1';
 Readonly my $EXEC_PORT => '999';
-Readonly my $EXEC_KEY  => '/home/satan/key';
+Readonly my $EXEC_KEY  => '/home/etc/satan/key';
 Readonly my $TEMPLATE_DIR => '/usr/satan/templates';
 
 # json serialization
@@ -171,6 +171,18 @@ sub vhost_del {
 		};
 	}
 
+	# apache2 config
+	my $apache2_config_file = "/etc/apache2/sites-enabled/$vhost_name";
+	if (-l $apache2_config_file) {
+		unlink $apache2_config_file;	
+	}
+
+	# nginx config
+	my $nginx_config_file = "/etc/nginx/sites_enabled/$vhost_name";
+	if (-l $nginx_config_file) {
+		unlink $nginx_config_file;
+	}
+
 	return { status => 0, message => 'OK' };	
 }
 
@@ -221,41 +233,49 @@ sub vhost_add {
 	}
 
 	# apache2 config
-	my $apache2_config;
-	eval {
-		$apache2_config = template('apache2', {
-			vhost_name => $vhost_name,
-			vhost_path => $vhost_path,
-		});
-	}
-	or do {
-		return { status => 500, message => $@ };
-	};
+	my $apache2_config_file = "/etc/apache2/sites-available/$vhost_name";
 
-	open my $apache2_fh, '>', "/etc/apache2/sites-available/$vhost_name" or die $!;
-	print $apache2_fh $apache2_config;
-	close $apache2_fh;
+	if (!-f $apache2_config_file) {
+		my $apache2_config;
+		eval {
+			$apache2_config = template('apache2', {
+				vhost_name => $vhost_name,
+				vhost_path => $vhost_path,
+			});
+		}
+		or do {
+			return { status => 500, message => $@ };
+		};
+
+		open my $apache2_fh, '>', $apache2_config_file or die $!;
+		print $apache2_fh $apache2_config;
+		close $apache2_fh;
+	}
+
 	symlink("../sites-available/$vhost_name", "/etc/apache2/sites-enabled/$vhost_name") or die;
 
-	### Apache2 config: $apache2_config
-
 	# nginx config
-	my $nginx_config;
-	eval {
-		$nginx_config = template('nginx', {
-			vhost_name => $vhost_name,
-			vhost_path => $vhost_path,
-		});
-	}
-	or do {
-		return { status => 500, message => $@ };
-	};
-
-	### Nginx config: $nginx_config
+	my $nginx_config_file = "/etc/nginx/sites-available/$vhost_name";
 	
-	open my $nginx_fh, '>', "/etc/nginx/sites-available/$vhost_name" or die;
-	print $nginx_fh $nginx_config;
-	close $nginx_fh;
+	if (!-f $nginx_config_file) {
+		my $nginx_config;
+		eval {
+			$nginx_config = template('nginx', {
+				vhost_name => $vhost_name,
+				vhost_path => $vhost_path,
+			});
+		}
+		or do {
+			return { status => 500, message => $@ };
+		};
+
+		### Nginx config: $nginx_config
+		
+		open my $nginx_fh, '>', $nginx_config_file or die;
+		print $nginx_fh $nginx_config;
+		close $nginx_fh;
+	}
+
 	symlink("../sites-available/$vhost_name", "/etc/nginx/sites-enabled/$vhost_name") or die;
 
 	return { status => 0, message => 'OK' };	

@@ -22,6 +22,9 @@ use Satan::Dns;
 use Satan::Mysql;
 use Satan::Vhost;
 
+our $MINLEN = undef;
+our $MAXLEN = undef;
+
 # json serialization
 my $json  = JSON::XS->new->utf8;
 

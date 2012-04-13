@@ -23,8 +23,10 @@ use Data::Dumper;
 #use Data::Validate::IP qw(is_ipv4 is_ipv6);
 
 $|++;
-my $MINLEN = 8;   # password min length
-my $MAXLEN = 30;  # password max length
+#my $MINLEN = 8;   # password min length
+#my $MAXLEN = 30;  # password max length
+our $MINLEN = undef;
+our $MAXLEN = undef;
 $SIG{CHLD} = 'IGNORE';
 
 sub new {

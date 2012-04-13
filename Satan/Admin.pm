@@ -41,8 +41,9 @@ Readonly my $SATAN_KEY_MAXLEN => 16;
 Readonly my @export_ok => qw( adduser deluser passwd );
 
 # Data::Password 
-my $MINLEN = undef;
-my $MAXLEN = undef;
+our $MINLEN = undef;
+our $MAXLEN = undef;
+
 
 sub get_data {
         my $self = shift;
@@ -306,6 +307,11 @@ sub deluser {
 		return "Cannot delete user $user_name ($uid) from database. Database error tutaj: $@";
 	};
 	
+	# prepare user data 
+	$self->{data} = { 
+		uid             => $uid,
+	};
+
 	commit($db);
 	return;
 }
