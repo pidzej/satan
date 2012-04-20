@@ -1,0 +1,13 @@
+Satan
+  * prepare dev environment
+
+Satan::Vhost
+  * purge option
+
+Satan::Dns
+  * define container ip address by name
+  * code refactoring
+
+Executor
+  * split into modules
+  * use CPAN template system

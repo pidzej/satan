@@ -19,11 +19,14 @@ use utf8;
 use warnings;
 use strict;
 
-my $MINLEN = 8;   # password min length
-my $MAXLEN = 30;  # password max length
+#our $MINLEN = 8;   # password min length
+#our $MAXLEN = 30;  # password max length
+our $MINLEN = undef;   # password min length
+our $MAXLEN = undef;  # password max length
 $|++;
 
 $SIG{CHLD} = 'IGNORE';
+
 
 sub new {
 	my $class = shift;

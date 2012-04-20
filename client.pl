@@ -18,7 +18,7 @@ use Data::Dumper;
 # configuration
 Readonly my $SATAN_ADDR => '127.0.0.1';
 Readonly my $SATAN_PORT => '666';
-Readonly my $SATAN_KEY  => '/home/satan/user.key';
+Readonly my $SATAN_KEY  => '/home/etc/satan/key';
 
 # options
 my ($opt_key, $opt_debug, $opt_verbose, $opt_help);

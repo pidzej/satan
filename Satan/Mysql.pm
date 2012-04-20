@@ -24,8 +24,10 @@ use Readonly;
 Readonly my @export_ok => qw( add del list help );
 
 $|++;
-my $MINLEN = 8;   # password min length
-my $MAXLEN = 30;  # password max length
+#my $MINLEN = 8;   # password min length
+#my $MAXLEN = 30;  # password max length
+our $MINLEN = undef;
+our $MAXLEN = undef;
 $SIG{CHLD} = 'IGNORE';
 
 sub get_data {

@@ -43,6 +43,8 @@ use Smart::Comments;
 
 $|++; 
 $SIG{CHLD} = 'IGNORE'; # braaaaains!!
+our $MINLEN = undef;
+our $MAXLEN = undef;
 
 # configuration
 my $agent_conf = YAML::LoadFile("$Bin/../config/agent.yaml");
@@ -84,21 +86,30 @@ my $s_server = IO::Socket::INET->new(
         ReuseAddr => 1,
 ) or die "Cannot create socket! $!\n";
 
-# connect to db
-my $dbh = DBI->connect("dbi:mysql:satan;mysql_read_default_file=$Bin/../config/my.cnf",undef,undef,{ RaiseError => 1, AutoCommit => 1 });
-$dbh->{mysql_auto_reconnect} = 1;
-$dbh->{mysql_enable_utf8}    = 1;
+sub db_connect {
+	# connect to db
+	my $db;
+	my $dbh = DBI->connect("dbi:mysql:satan;mysql_read_default_file=$Bin/../config/my.cnf",undef,undef,{ RaiseError => 1, AutoCommit => 1 })
+		or die 'Cannot connect to DB';
+	$dbh->{mysql_auto_reconnect} = 1;
+	$dbh->{mysql_enable_utf8}    = 1;
+	$db->{dbh} = $dbh;
 
-# db statements
-my $db;
-$db->{get_user_credentials}  = $dbh->prepare("SELECT user_name        FROM user_auth   WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
-$db->{get_admin_credentials} = $dbh->prepare("SELECT user_name, privs FROM admin_auth  WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
-$db->{get_server_name}       = $dbh->prepare("SELECT id, server_name  FROM server_list WHERE id=?");  
+	# db statements
+	$db->{get_user_credentials}  = $dbh->prepare("SELECT user_name        FROM user_auth   WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
+	$db->{get_admin_credentials} = $dbh->prepare("SELECT user_name, privs FROM admin_auth  WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
+	$db->{get_server_name}       = $dbh->prepare("SELECT id, server_name  FROM server_list WHERE id=?");  
+	
+	return $db;
+}
 
 while(my $s_client = $s_server->accept()) {
 	$s_client->autoflush(1);
         if(fork() == 0) {
 		my ($client, $agent, $exec, $response);
+		
+		# connect to db
+		my $db = db_connect();
 
 		# client ip
 		$client->{ipaddr} = $s_client->peerhost;

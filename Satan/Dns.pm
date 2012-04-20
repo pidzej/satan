@@ -50,6 +50,8 @@ Readonly my @export_ok => qw( add del list help );
 
 $|++;
 $SIG{CHLD} = 'IGNORE';
+our $MINLEN = undef;
+our $MAXLEN = undef;
 
 sub get_data {
         my $self = shift;
