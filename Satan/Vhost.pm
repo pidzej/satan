@@ -110,7 +110,7 @@ sub add {
 	}
 	
 	eval { 
-		$self->reload_nginx;
+		$self->reload_nginx();
 	} 
 	or do {
 		print "Cannot reload nginx. $@";
