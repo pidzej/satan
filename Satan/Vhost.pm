@@ -94,7 +94,7 @@ sub add {
 		
 	# check if not official rootnode domain
 	if ($domain_name =~ /\.rootnode\.net$/ and $domain_name !~ /(^|\.)\Q$user_name\E\.rootnode\.net$/) {
-		return "You cannot use rootnode domains. Only \033[1m*.$domain_name.rootnode.net\033[0m is allowed.";
+		return "You cannot use rootnode domains. Only \033[1m*.$user_name.rootnode.net\033[0m is allowed.";
 	}
 
 	$db->{check_domain}->execute($domain_name);

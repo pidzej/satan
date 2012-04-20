@@ -45,7 +45,7 @@ if (!@ARGV) {
 
 # create socket
 my $s_agent = IO::Socket::INET->new(
-        LocalAddr => '0.0.0.0',
+        LocalAddr => '127.0.0.1',
         LocalPort => $agent->{port},
         Proto     => 'tcp',
         Listen    => 5,
