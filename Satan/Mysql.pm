@@ -19,13 +19,25 @@ use DBI;
 use Crypt::GeneratePassword qw(chars);
 use Data::Password qw(:all);
 use Data::Dumper;
-#use Data::Validate::Domain qw(is_domain is_hostname);
-#use Data::Validate::IP qw(is_ipv4 is_ipv6);
+use Readonly;
+
+Readonly my @export_ok => qw( add del list help );
 
 $|++;
 my $MINLEN = 8;   # password min length
 my $MAXLEN = 30;  # password max length
 $SIG{CHLD} = 'IGNORE';
+
+sub get_data {
+        my $self = shift;
+        return $self->{data};
+}
+
+sub get_export {
+        my $self = shift;
+        my %export_ok = map { $_ => 1 } @export_ok;
+        return %export_ok;
+}
 
 sub new {
 	my $class = shift;
@@ -333,7 +345,7 @@ sub list {
 				$listing .= join("\n", @orphaned);
 			}
 		
-			$self->{listing} = $listing;
+			$self->{data} = $listing;
 		} 
 		elsif ($detailed_listing eq 'user') {
 			# satan mysql list user <user>
@@ -369,7 +381,7 @@ sub list {
 			else {
 				$listing = "No users.";
 			}
-			$self->{listing} = $listing;
+			$self->{data} = $listing;
 		}
 	}
 	else {
@@ -419,7 +431,7 @@ sub list {
 			$listing .= join("\n", @orphaned);
 		}
 
-		$self->{listing} = $listing;
+		$self->{data} = $listing;
 	}
 
 	return;
@@ -469,12 +481,7 @@ sub help {
   mysql passwd <user>
 END_OF_USAGE
 
-	$self->{listing} = $USAGE;
+	$self->{data} = $USAGE;
 	return;
 }
-
-sub get_data {
-        my $self = shift;
-        return $self->{listing} || '';
-}
-
+1;
