@@ -15,6 +15,7 @@ use YAML qw(LoadFile);
 use FindBin qw($Bin);
 use Data::Dumper;
 no Smart::Comments;
+use lib $Bin;
 
 # Satan modules
 use Satan::Admin;
