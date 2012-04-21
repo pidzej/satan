@@ -14,7 +14,7 @@ use IO::Socket;
 use YAML qw(LoadFile);
 use FindBin qw($Bin);
 use Data::Dumper;
-use Smart::Comments;
+no Smart::Comments;
 
 # Satan modules
 use Satan::Admin;

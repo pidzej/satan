@@ -18,7 +18,7 @@ use File::Slurp;
 use IO::Socket;
 use Digest::MD5 qw(md5_base64);
 use Readonly;
-use Smart::Comments;
+no Smart::Comments;
 
 $|++;
 $SIG{CHLD} = 'IGNORE'; # braaaaains!!!
