@@ -13,7 +13,7 @@ use Rootnode::Validate;
 use Rootnode::Password;
 use DBI;
 use Data::Dumper;
-use Smart::Comments;
+no Smart::Comments;
 use Data::Password qw(IsBadPassword);
 use Crypt::PasswdMD5;
 use Digest::MD5 qw(md5_base64);
