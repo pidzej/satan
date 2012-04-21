@@ -18,7 +18,7 @@ use Data::Password qw(:all);
 use FindBin qw($Bin);
 use Data::Validate::Domain qw(is_domain is_hostname);
 use Data::Validate::IP qw(is_ipv4 is_ipv6);
-use Smart::Comments;
+no Smart::Comments;
 use Readonly;
 use feature 'switch';
 use utf8;

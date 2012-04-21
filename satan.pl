@@ -38,7 +38,7 @@ use FindBin qw($Bin);
 use IO::Socket;
 use IO::Socket::Socks;
 use Digest::MD5 qw(md5_base64);
-use Smart::Comments;
+no Smart::Comments;
 #use lib $Bin;
 
 $|++; 
@@ -49,6 +49,7 @@ our $MAXLEN = undef;
 # configuration
 my $agent_conf = YAML::LoadFile("$Bin/../config/agent.yaml");
 my $exec_conf  = YAML::LoadFile("$Bin/../config/exec.yaml");
+Readonly my $ADMIN_HOST => '10.1.0.1';
 Readonly my $SATAN_HOST => '0.0.0.0';
 Readonly my $SATAN_PORT => 1600;
 Readonly my $PROXY_PORT => 1605;
@@ -117,7 +118,7 @@ while(my $s_client = $s_server->accept()) {
 		### client ip: $client->{ipaddr}
 
 		# check server name
-		if ($client->{ipaddr} =~ /^127\.16\.\d+\.(\d+)$/) {
+		if ($client->{ipaddr} =~ /^127\.16\.\d+\.(\d+)$/ or $client->{ipaddr} eq $ADMIN_HOST) {
 			my $server_id = $1;
 			$db->{get_server_name}->execute($server_id);
 			( $client->{server_id}, $client->{server_name} ) = $db->{get_server_name}->fetchrow_array;
