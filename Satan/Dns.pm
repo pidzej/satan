@@ -48,6 +48,11 @@ Readonly my $GMAIL_MX4_PRIO => 10;
 Readonly my $GMAIL_MX5_PRIO => 10;
 Readonly my @export_ok => qw( add del list help );
 
+# default ip address for container
+Readonly my %ipaddr_of => {
+	web1 => '94.23.145.245',
+};
+
 $|++;
 $SIG{CHLD} = 'IGNORE';
 our $MINLEN = undef;
@@ -68,6 +73,8 @@ sub new {
 	my $class = shift;
 	my ($self) =  @_;
 	my $dbh = DBI->connect("dbi:mysql:pdns;mysql_read_default_file=$Bin/../config/my.cnf",undef,undef,{ RaiseError => 0, AutoCommit => 1 });
+
+	### $self
 
 	$self->{dns_add_domain}      = $dbh->prepare("INSERT INTO domains(uid,name,type) VALUES(?,?,?)");
 	$self->{dns_add_record}      = $dbh->prepare("INSERT INTO records(domain_id,name,type,content,ttl,prio,change_date) VALUES (?,?,?,?,?,?,UNIX_TIMESTAMP(NOW()))");
@@ -100,6 +107,8 @@ sub new {
 	#$self->{dns_limit} = $dbh->prepare("SELECT dns FROM limits WHERE uid=?");
 	#$self->{event_add} = $dbh->prepare("INSERT INTO events(uid,date,daemon,event) VALUES(?,NOW(),'dns',?)");
 	$self->{dbh} = $dbh;
+
+	# containers configuration
 	
 	bless $self, $class;
 	return $self;
@@ -109,6 +118,8 @@ sub add {
 	my($self,@args) = @_;
 	my $uid = $self->{uid};
 	my $dbh = $self->{dbh};  
+	my $user_name   = $self->{user_name};
+	my $server_name = $self->{server_name};
 
 	my $dns_add_domain   = $self->{dns_add_domain};
 	my $dns_add_record   = $self->{dns_add_record};
@@ -134,9 +145,15 @@ sub add {
 				return "Cannot add domain! Domain \033[1m$domain_name\033[0m is owned by another user.";
 			}
 		}
+	# domain doesn't exist
 	} else {
-		# domain doesn't exist
+		# put record type back to args
 		unshift @args, $record_type;
+
+	        # check if not official rootnode domain
+	        if ($domain_name =~ /\.rootnode(?:status)?\.(?:net|pl)$/ and $domain_name !~ /(^|\.)\Q$user_name\E\.rootnode(?:status)?\.(?:net|pl)$/) {
+                	return "You cannot use rootnode domains. Only \033[1m*.$user_name.rootnode.net\033[0m is allowed.";
+		}
 
 		# add domain
 		$dns_add_domain->execute($uid,$domain_name,'NATIVE');
@@ -148,8 +165,15 @@ sub add {
 		$self->{dns_add_record}->execute($domain_id, $domain_name, 'NS', $DEFAULT_NS1, $DEFAULT_TTL, undef);
 		$self->{dns_add_record}->execute($domain_id, $domain_name, 'NS', $DEFAULT_NS2, $DEFAULT_TTL, undef);
 
-		my $ipaddr = shift @args || '';
-		if ($ipaddr) {
+		my $ipaddr = shift @args || $ipaddr_of{$server_name};
+
+		# put mail options back to arguments
+		if ($ipaddr eq 'nomail' or $ipaddr eq 'gmail') {
+			unshift @args, $ipaddr;
+			$ipaddr = $ipaddr_of{$server_name};
+		}
+
+		if (defined $ipaddr) {
 			if (is_ipv4($ipaddr)) {
 				$self->{dns_add_record}->execute($domain_id, $domain_name, 'A', $ipaddr, $DEFAULT_TTL, undef);
 			} 
@@ -161,12 +185,11 @@ sub add {
 				return "Domain \033[1m$domain_name\033[0m does NOT exist! Please double check the name or\n"
 				     . "add the domain first with \033[1;32msatan dns add domain.com\033[0m command.";
 			}
-			elsif ($ipaddr eq '') {
-				# do nothing
-			}
 			else {
 				return "IP \033[1m$ipaddr\033[0m is NOT a proper IP address. Some basic records not added."; 
 			}
+			
+			# add record to db
 			$self->{dns_add_record}->execute($domain_id, "*.$domain_name", 'CNAME', $domain_name, $DEFAULT_TTL, undef);
 		}
 
@@ -439,22 +462,22 @@ sub help {
 \033[1mSatan :: DNS\033[0m
 
 \033[1;32mSYNTAX\033[0m
-  dns add <domain> [<ipaddr>] [nomail|gmail]           add domain (incl. basic records)
-  dns add <domain> a     <host|@|.> <ipv4>             add A record
-  dns add <domain> aaaa  <host|@|.> <ipv6>             add AAAA record
-  dns add <domain> cname <host|@|.> <domain>           add CNAME record
-  dns add <domain> mx    <host|@|.> <domain> [<prio>]  add MX record
-  dns add <domain> txt   <host|@|.> "<txt>"            add TXT record
+  dns add <domain> [<ipaddr>] [nomail|gmail]             add domain (incl. basic records)
+  dns add <domain> a     <host|@|.> <ipv4>               add A record
+  dns add <domain> aaaa  <host|@|.> <ipv6>               add AAAA record
+  dns add <domain> cname <host|@|.> <domain>             add CNAME record
+  dns add <domain> mx    <host|@|.> <domain> [<prio>]    add MX record
+  dns add <domain> txt   <host|@|.> "<txt>"              add TXT record
   dns add <domain> srv   <host> <prio> <weight> <port> <domain>     
-                                                       add SRV record
-  dns add <domain> soa   <host|@|.> <ns> <mail>        add SOA record (or delegate a subdomain)
-  dns add <domain> ns    <host|@|.> <domain>           add NS record
-  dns add <domain> ptr   <host|@|.> <domain>           add PTR record             
-  dns del <domain>                                     delete domain and ALL RECORDS!
-  dne del <id>                                         delete record
-  dns list                                             list domains
-  dns list <domain>                                    list records
-  dns help                                             show help
+                                                         add SRV record
+  dns add <domain> soa   <host|@|.> <ns> <mail>          add SOA record (or delegate a subdomain)
+  dns add <domain> ns    <host|@|.> <domain>             add NS record
+  dns add <domain> ptr   <host|@|.> <domain>             add PTR record             
+  dns del <domain>                                       delete domain and ALL RECORDS!
+  dne del <id>                                           delete record
+  dns list                                               list domains
+  dns list <domain>                                      list records
+  dns help                                               show help
 
   \033[1mWhere:\033[0m
     <domain> must be a canonical domain name
