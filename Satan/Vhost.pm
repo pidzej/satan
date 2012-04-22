@@ -28,7 +28,7 @@ $SIG{CHLD} = 'IGNORE';
 
 Readonly my $NGINX_MAP_FILE    => '/etc/nginx/conf.d/map.conf';
 Readonly my $CONTAINER_NETWORK => '10.1.0.0';
-Readonly my @export_ok => qw( add del list );
+Readonly my @export_ok => qw( add del list help );
 
 sub get_data {
         my $self = shift;
