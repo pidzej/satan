@@ -162,14 +162,14 @@ sub add {
 		# forbidden domains
 		foreach my $forbidden_domain (@FORBIDDEN_DOMAINS) {
 			if ($domain_name =~ /$forbidden_domain$/) {
-				return "You cannot use $domain_name domain. Only \033[1m$user_name.rootnode.net\033[0m is allowed.";
+				return "You cannot use this domain. Only \033[1m$user_name.rootnode.net\033[0m is allowed.";
 			}
 		}
 
 	        # rootnode domain
 	        if ($domain_name =~ /\.rootnode\.net$/) {
-			if ($domain_name !~ /(^|\.)\Q$user_name\E\.rootnode\.net$/) {
-				return "You cannot use $domain_name domain. Only \033[1m$user_name.rootnode.net\033[0m is allowed.";
+			if ($domain_name !~ /^\Q$user_name\E\.rootnode\.net$/) {
+				return "You cannot use this domain. Only \033[1m$user_name.rootnode.net\033[0m is allowed.";
 			} 
 			else {
 				# drop deprecated dns entries
