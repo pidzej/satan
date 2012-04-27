@@ -147,12 +147,14 @@ sub add {
 	$dns_check_domain->execute($domain_name);
 	if($dns_check_domain->rows) {
 		($domain_id, my $domain_uid) = $dns_check_domain->fetchrow_array;
-		if ($record_type !~ /^(a|aaaa|cname|mx|txt|srv|soa|ns|ptr)$/i) {		
-			if($domain_uid == $uid) {
-				return "Domain \033[1m$domain_name\033[0m already added. Nothing to do.";
-			} else {
+		if ($domain_uid != $uid) {
+			if ($record_type !~ /^(a|aaaa|cname|mx|txt|srv|soa|ns|ptr)$/i) {
 				return "Cannot add domain! Domain \033[1m$domain_name\033[0m is owned by another user.";
 			}
+			return "Cannot add record! You are not the owner of \033[1m$domain_name\033[0m domain.";
+		}
+		if ($record_type !~ /^(a|aaaa|cname|mx|txt|srv|soa|ns|ptr)$/i) {
+			return "Domain \033[1m$domain_name\033[0m already added. Nothing to do.";
 		}
 	# domain doesn't exist
 	} else {
