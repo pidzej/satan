@@ -1,0 +1,20 @@
+<VirtualHost localhost:80>
+        ServerName %%vhost_name%%
+        ServerAlias www.%%vhost_name%%
+        DocumentRoot %%vhost_path%%/htdocs
+
+        <Directory %%vhost_path%%/htdocs>
+                Options Indexes SymLinksIfOwnerMatch
+		# AllowOverride All (to use .htaccess files)
+                AllowOverride None
+                Order allow,deny
+                allow from all
+        </Directory> 
+
+        # Possible values include: debug, info, notice, warn, error, crit,
+        # alert, emerg.
+        LogLevel warn
+        
+        ErrorLog %%vhost_path%%/logs/apache2-error.log
+        CustomLog %%vhost_path%%/logs/apache2-access.log combined
+</VirtualHost>

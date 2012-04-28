@@ -1,0 +1,38 @@
+server {
+    listen lxc:80;
+    server_name .%%vhost_name%%;
+
+    root %%vhost_path%%/htdocs;
+    index index.html index.php;
+
+    # Log files    
+    access_log %%vhost_path%%/logs/nginx-access.log;
+    #access_log off;
+    error_log  %%vhost_path%%/logs/nginx-error.log info;
+
+    # Static files handled by Nginx
+    location / {
+        try_files $uri $uri/ @proxy;
+        expires 1d;
+    }
+
+    # PHP support
+    location ~ ^(.+\.php)(.*)$ {
+        error_page 418 = @proxy;
+
+        # Known security flaws
+        location ~ (\..*/.*.php|\0) {
+            return 400;
+        }
+
+        # I'm a teapot!
+        return 418;
+    }
+
+    # Proxy to Apache2
+    location @proxy {
+        internal;
+        include /etc/nginx/proxy.conf;
+        proxy_pass http://127.0.0.1:80;
+    }
+}
