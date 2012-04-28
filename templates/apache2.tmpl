@@ -9,7 +9,7 @@
     CustomLog %%vhost_path%%/logs/apache2-access.log combined
 
     <Directory %%vhost_path%%/htdocs>
-        Options Indexes SymLinksIfOwnerMatch
+        Options Indexes FollowSymLinks
         AllowOverride All
         Order allow,deny
         allow from all
