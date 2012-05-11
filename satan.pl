@@ -38,7 +38,7 @@ use FindBin qw($Bin);
 use IO::Socket;
 use IO::Socket::Socks;
 use Digest::MD5 qw(md5_base64);
-no Smart::Comments;
+use Smart::Comments;
 use lib $Bin;
 
 $|++; 
