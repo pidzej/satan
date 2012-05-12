@@ -66,7 +66,7 @@ sub reload_nginx {
 	
 	$db->{get_domain_list}->execute or die "Cannot get domain list from database.";
 	my @nginx_map;
-	push @nginx_map, join("\n\t", 'map $http_host $ipaddr {', 'hostnames;', "default\t127.0.0.1;\n");
+	push @nginx_map, join("\n\t", 'map .$http_host $ipaddr {', 'hostnames;', "default\t127.0.0.1;\n");
 	while(my ($uid, $domain_name) = $db->{get_domain_list}->fetchrow_array) {
 		my $ipaddr = Satan::Tools->get_container_ip( $uid, $CONTAINER_NETWORK );
 		push @nginx_map, "\t".join("\t", $domain_name, $ipaddr).";\n";
