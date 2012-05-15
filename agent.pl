@@ -22,6 +22,7 @@ use Satan::Admin;
 use Satan::Dns;
 use Satan::Mysql;
 use Satan::Vhost;
+use Satan::Ftp;
 
 our $MINLEN = undef;
 our $MAXLEN = undef;
