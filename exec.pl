@@ -19,6 +19,7 @@ use IO::Socket;
 use Digest::MD5 qw(md5_base64);
 use Readonly;
 no Smart::Comments;
+use Data::Dumper;
 
 $|++;
 $SIG{CHLD} = 'IGNORE'; # braaaaains!!!
@@ -184,6 +185,37 @@ sub vhost_del {
 	}
 
 	return { status => 0, message => 'OK' };	
+}
+
+sub ftp_add {
+	my ($self, $client) = @_;
+	my $uid       = $client->{uid};
+	my $user_name = $client->{user_name};
+	my ($ftp_user, $ftp_password, $ftp_directory) = @{ $client->{args} };
+	
+	my $message;
+	my $directory_owner = (stat($ftp_directory))[4];
+
+	# Check if absolute path
+	if ($ftp_directory !~ /^\// ) {
+		$message = "Directory \033[1m$ftp_directory\033[0m must be an absolute path.";
+	} 
+	# Check if directory exists
+	elsif (!-d $ftp_directory) {
+		$message = "Directory \033[1m$ftp_directory\033[0m NOT found.";
+	}
+	# Check owner
+	elsif ($directory_owner != $uid) {
+		$message = "You are not an owner of \033[1m$ftp_directory\033[0m directory!";
+	}
+
+	# Do rollback
+	if (defined $message) {
+		system("/usr/bin/perl /usr/satan/prod/client.pl ftp del $ftp_user");	
+		return { status => 403, message => $message };
+	}
+
+	return { status => 0, message => 'OK' };
 }
 
 sub vhost_add {

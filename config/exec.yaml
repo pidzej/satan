@@ -2,3 +2,5 @@
 vhost: 
     add: create directories
     del: change directory name
+ftp:
+    add: check directory owner
