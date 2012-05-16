@@ -87,7 +87,7 @@ my $USAGE = <<"END_OF_USAGE";
   ftp help                                            show help
 
 It is a good idea to genereate password with command:
-$ PASSWORD=\$(perl -le 'print map { ("a".."z", 0..9)[rand 36] } 1..12')
+\$ PASSWORD=\$(perl -le 'print map { ("a".."z", 0..9)[rand 36] } 1..12')
 
 END_OF_USAGE
 
