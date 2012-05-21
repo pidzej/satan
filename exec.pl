@@ -215,6 +215,9 @@ sub ftp_add {
 		return { status => 403, message => $message };
 	}
 
+	# Restart vsftpd
+	system("/usr/bin/sudo /usr/bin/svc -t /etc/service/vsftpd");
+
 	return { status => 0, message => 'OK' };
 }
 
