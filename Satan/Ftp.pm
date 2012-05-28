@@ -23,11 +23,11 @@ $SIG{CHLD} = 'IGNORE';
 
 Readonly my $DIR_MAXLEN => 255;
 Readonly my %IS_PRIV => (
-	mkdir  => 1,
-	delete => 1,
-	upload => 1,
-	read   => 1,
-	ssl    => 1,
+	nomkdir  => 1,
+	nodelete => 1,
+	noupload => 1,
+	noread   => 1,
+	nossl    => 1,
 );
 Readonly my @export_ok => qw(add del list help);
 
@@ -51,7 +51,7 @@ sub new {
 	$dbh->{mysql_enable_utf8}    = 1;
 
 	my $db;
-	$db->{add_user} = $dbh->prepare("INSERT INTO all_users(uid, user_name, server_name, password, directory, mkdir_priv, delete_priv, upload_priv, read_priv, ssl_priv, created_at, updated_at) VALUES (?, ?, ?, PASSWORD(?), ?, ?, ?, ?, ?, ?, NOW(), NOW())");
+	$db->{add_user} = $dbh->prepare("INSERT INTO all_users(uid, user_name, server_name, password, directory, mkdir_priv, delete_priv, upload_priv, read_priv, ssl_priv, created_at, updated_at, owner) VALUES (?, ?, ?, PASSWORD(?), ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)");
 	$db->{del_user} = $dbh->prepare("DELETE FROM all_users WHERE uid=? AND user_name=? LIMIT 1");
 	$db->{get_user} = $dbh->prepare("
 		SELECT 
@@ -192,9 +192,9 @@ sub add {
 	# Check privileges
 	my @privs = @args;
 	foreach my $priv_name (@privs) {
-		if (!$IS_PRIV{"no$priv_name"}) {
-			return "Argument \033[1m$priv_name\033[0m is NOT a proper privilege name.";
-		}
+		next if $IS_PRIV{$priv_name};
+		next if $IS_PRIV{"no$priv_name"};
+		return "Argument \033[1m$priv_name\033[0m is NOT a proper privilege name.";
 	}	
 		
 	# Store privs as hash table
@@ -209,8 +209,8 @@ sub add {
 
 	# Add account to database
 	$db->{add_user}->execute($uid, $ftp_user, $server_name, $ftp_password, $ftp_directory, 
-	                         $mkdir_priv, $delete_priv, $upload_priv, $read_priv, $ssl_priv) 
-	                         or return "Cannot add FTP account \033[1m$ftp_user\033[0m. System error."; 
+	                         $mkdir_priv, $delete_priv, $upload_priv, $read_priv, $ssl_priv,
+				 $uid) or return "Cannot add FTP account \033[1m$ftp_user\033[0m. System error."; 
 	
 	return;
 }
