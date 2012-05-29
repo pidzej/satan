@@ -1,4 +1,4 @@
-#!/usr/bin/perl -l
+#!/usr/bin/perl 
 #
 # Satan (client)
 # Rootnode http://rootnode.net
@@ -29,7 +29,11 @@ Options:
    -v, --verbose           display JSON output
    -d, --debug             display data structures
    -h, --help              show help
+
 END_OF_USAGE
+
+# add new line after output
+$\ = "\n";
 
 # json serialization
 my $json = JSON::XS->new->utf8;
@@ -139,14 +143,14 @@ sub request {
 			print STDERR "\n\033[1mSatan output:\033[0m";
 		}
 	
-		# print message end exit with non-zero status code
-		print STDERR $response->{message};
-
 		# trim status code to first digit
 		my $status_code = substr($response->{status}, 0, 1);
+		
+		# set status code
+		$! = $status_code;
 	
 		# exit with non-zero status code
-		exit $status_code;
+		die $response->{message} . "\n";
 	}
 
 	return $response;
