@@ -35,6 +35,7 @@ use JSON::XS;
 use Readonly;
 use YAML qw(LoadFile);
 use FindBin qw($Bin); 
+use POSIX qw(isdigit);
 use IO::Socket;
 use IO::Socket::Socks;
 use Digest::MD5 qw(md5_base64);
@@ -53,6 +54,7 @@ Readonly my $ADMIN_HOST => '10.1.0.1';
 Readonly my $SATAN_HOST => '0.0.0.0';
 Readonly my $SATAN_PORT => 1600;
 Readonly my $PROXY_PORT => 1605;
+Readonly my $PROXY_PORT_PREFIX => 17;
 
 # json serialization
 my $json = JSON::XS->new->utf8;
@@ -268,11 +270,21 @@ while(my $s_client = $s_server->accept()) {
 				# client uid is container id
 				my $container_id = $client->{uid};
 
+				# get socks proxy port (17xx)
+				my $proxy_port = $PROXY_PORT_PREFIX . sprintf('%02d', $client->{server_id});
+				if (!isdigit($proxy_port) or $proxy_port < 1700) {
+					$response = { status => 503, message => "Incorrect proxy port \033[1m$proxy_port\033[0m. System error." };	
+					last CLIENT;
+				}
+
+				print "proxy_port $proxy_port";
+
 				# connect to executor (via socks proxy)
 				eval {
 					$exec->{sock} = worker_connect(
-						type => 'socks',
-						port => $container_id
+						type      => 'socks',
+						port      => $container_id,
+						proxyport => $proxy_port
 					);
 				} or do {
 					print "Cannot connect to proxy";
