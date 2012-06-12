@@ -1,9 +1,23 @@
-# Agent configuration
-dns: 
-    port: 1609
+# Agent port configuration
 
-vhost: 
-    port: 1608
+admin:
+    default: 1666
+
+dns:
+    default: 1609
+
+ftp:
+    web1: 11201
+    web2: 11202
 
 mysql:
-    port: 1610
+    web1: 11001
+    web2: 11002
+
+vhost:
+    web1: 1801
+    web2: 1802
+
+socks:
+    web1: 1701
+    web2: 1702

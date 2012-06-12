@@ -60,7 +60,7 @@ Readonly my $PROXY_PORT_PREFIX => 17;
 my $json = JSON::XS->new->utf8;
 
 # usage
-my $satan_services = join(q[ ], sort grep { $_ ne 'admin' } keys %$agent_conf);
+my $satan_services = join(q[ ], sort grep { $_ !~ /^(admin|socks)$/ } keys %$agent_conf);
 Readonly my $USAGE => <<"END_USAGE";
 \033[1mSatan - the most hellish service manager\033[0m
 Usage: satan [SERVICE] [TASK] [ARGS]
@@ -230,6 +230,15 @@ while(my $s_client = $s_server->accept()) {
 
 			### Agent: $agent			
 			
+			# get agent port
+			my $server_name = $client->{server_name}; 
+			$agent->{port}  = $agent->{$server_name} || $agent->{default};
+
+			if (!isdigit($agent->{port})) {
+				$response = { status => 503, message => "Agent port for server \033[1m$server_name\033[0m not found. System error." };
+				last CLIENT;
+			}
+
 			# connect to agent
 			eval {
 				$agent->{sock} = worker_connect (
@@ -270,21 +279,19 @@ while(my $s_client = $s_server->accept()) {
 				# client uid is container id
 				my $container_id = $client->{uid};
 
-				# get socks proxy port (17xx)
-				my $proxy_port = $PROXY_PORT_PREFIX . sprintf('%02d', $client->{server_id});
-				if (!isdigit($proxy_port) or $proxy_port < 1700) {
-					$response = { status => 503, message => "Incorrect proxy port \033[1m$proxy_port\033[0m. System error." };	
+				# get socks proxy port 
+				$agent->{proxy_port} = $agent_conf->{socks}->{$server_name};
+				if (!isdigit($agent->{proxy_port})) {
+					$response = { status => 503, message => "Proxy port for server \033[1m$server_name\033[0m not found. System error." };	
 					last CLIENT;
 				}
-
-				print "proxy_port $proxy_port";
 
 				# connect to executor (via socks proxy)
 				eval {
 					$exec->{sock} = worker_connect(
 						type      => 'socks',
 						port      => $container_id,
-						proxyport => $proxy_port
+						proxyport => $agent->{proxy_port}
 					);
 				} or do {
 					print "Cannot connect to proxy";
