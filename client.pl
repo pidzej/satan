@@ -1,4 +1,4 @@
-#!/usr/bin/perl -l
+#!/usr/bin/perl 
 #
 # Satan (client)
 # Rootnode http://rootnode.net
@@ -8,7 +8,6 @@
 #
 use strict;
 use warnings;
-use feature 'switch';
 use JSON::XS;
 use IO::Socket;
 use Getopt::Long;
@@ -19,23 +18,52 @@ use Data::Dumper;
 Readonly my $SATAN_ADDR => '127.0.0.1';
 Readonly my $SATAN_PORT => '666';
 Readonly my $SATAN_KEY  => '/home/etc/satan/key';
+Readonly my $USAGE => <<END_OF_USAGE;
+Satan client
+Usage: satan [ -apkvdh <arg> ] <satan command>
 
-# options
-my ($opt_key, $opt_debug, $opt_verbose, $opt_help);
+Options:
+   -a, --addr <host>       server host 
+   -p, --port <port>       connection port
+   -k, --key  <key file>   path to the key file
+   -v, --verbose           display JSON output
+   -d, --debug             display data structures
+   -h, --help              show help
+
+END_OF_USAGE
+
+# add new line after output
+$\ = "\n";
+
+# json serialization
+my $json = JSON::XS->new->utf8;
+
+# command line options
+my ($opt_key, $opt_debug, $opt_verbose, $opt_help, $opt_addr, $opt_port);
 GetOptions (
 	'key=s'   => \$opt_key,
+	'addr=s'  => \$opt_addr,
+	'port=i'  => \$opt_port,
 	'debug'   => \$opt_debug,
 	'verbose' => \$opt_verbose,
 	'help'    => \$opt_help,
 );
 
-# json serialization
-my $json = JSON::XS->new->utf8;
+# show usage
+if ($opt_help) {
+	print $USAGE;
+	exit;
+}
+
+# satan connection data
+my $satan_addr = $opt_addr || $SATAN_ADDR; 
+my $satan_port = $opt_port || $SATAN_PORT;
+my $satan_key  = $opt_key  || $SATAN_KEY;
 
 # connect to satan 
 my $s_client = new IO::Socket::INET ( 
-	PeerAddr => $SATAN_ADDR,
-	PeerPort => $SATAN_PORT,
+	PeerAddr => $satan_addr,
+	PeerPort => $satan_port,
 	Timeout  => 1,
 ) or die "Could not connect to Satan! $!.\n";
 
@@ -115,14 +143,14 @@ sub request {
 			print STDERR "\n\033[1mSatan output:\033[0m";
 		}
 	
-		# print message end exit with non-zero status code
-		print STDERR $response->{message};
-
 		# trim status code to first digit
 		my $status_code = substr($response->{status}, 0, 1);
+		
+		# set status code
+		$! = $status_code;
 	
 		# exit with non-zero status code
-		exit $status_code;
+		die $response->{message} . "\n";
 	}
 
 	return $response;
@@ -132,7 +160,7 @@ sub request {
 my $command_name = $ARGV[0] || 'help';
 
 # authenticate
-auth($opt_key || $SATAN_KEY);
+auth($satan_key);
 
 # send command
 my $response = request(\@ARGV);

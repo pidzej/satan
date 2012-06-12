@@ -13,6 +13,7 @@ use JSON::XS;
 use IO::Socket;
 use YAML qw(LoadFile);
 use FindBin qw($Bin);
+use POSIX qw(isdigit);
 use Data::Dumper;
 no Smart::Comments;
 use lib $Bin;
@@ -22,6 +23,7 @@ use Satan::Admin;
 use Satan::Dns;
 use Satan::Mysql;
 use Satan::Vhost;
+use Satan::Ftp;
 
 our $MINLEN = undef;
 our $MAXLEN = undef;
@@ -31,6 +33,7 @@ my $json  = JSON::XS->new->utf8;
 
 # get service name
 my $service_name = shift or die "Service name not specified!\n";
+my $server_name  = shift or die "Server name not specified!\n";
 
 # load agent configuration
 my $agent_conf = YAML::LoadFile("$Bin/../config/agent.yaml");
@@ -43,6 +46,10 @@ if (!@ARGV) {
         chmod 0600,"$Bin/../logs/access.log";
         chmod 0600,"$Bin/../logs/error.log";
 }
+
+# get agent port
+$agent->{port} = $agent->{$server_name} || $agent->{default};
+isdigit($agent->{port}) or die "Agent port for server '$server_name' not found.\n";
 
 # create socket
 my $s_agent = IO::Socket::INET->new(

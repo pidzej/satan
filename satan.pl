@@ -35,10 +35,11 @@ use JSON::XS;
 use Readonly;
 use YAML qw(LoadFile);
 use FindBin qw($Bin); 
+use POSIX qw(isdigit);
 use IO::Socket;
 use IO::Socket::Socks;
 use Digest::MD5 qw(md5_base64);
-no Smart::Comments;
+use Smart::Comments;
 use lib $Bin;
 
 $|++; 
@@ -53,12 +54,13 @@ Readonly my $ADMIN_HOST => '10.1.0.1';
 Readonly my $SATAN_HOST => '0.0.0.0';
 Readonly my $SATAN_PORT => 1600;
 Readonly my $PROXY_PORT => 1605;
+Readonly my $PROXY_PORT_PREFIX => 17;
 
 # json serialization
 my $json = JSON::XS->new->utf8;
 
 # usage
-my $satan_services = join(q[ ], sort grep { $_ ne 'admin' } keys %$agent_conf);
+my $satan_services = join(q[ ], sort grep { $_ !~ /^(admin|socks)$/ } keys %$agent_conf);
 Readonly my $USAGE => <<"END_USAGE";
 \033[1mSatan - the most hellish service manager\033[0m
 Usage: satan [SERVICE] [TASK] [ARGS]
@@ -228,6 +230,15 @@ while(my $s_client = $s_server->accept()) {
 
 			### Agent: $agent			
 			
+			# get agent port
+			my $server_name = $client->{server_name}; 
+			$agent->{port}  = $agent->{$server_name} || $agent->{default};
+
+			if (!isdigit($agent->{port})) {
+				$response = { status => 503, message => "Agent port for server \033[1m$server_name\033[0m not found. System error." };
+				last CLIENT;
+			}
+
 			# connect to agent
 			eval {
 				$agent->{sock} = worker_connect (
@@ -268,11 +279,19 @@ while(my $s_client = $s_server->accept()) {
 				# client uid is container id
 				my $container_id = $client->{uid};
 
+				# get socks proxy port 
+				$agent->{proxy_port} = $agent_conf->{socks}->{$server_name};
+				if (!isdigit($agent->{proxy_port})) {
+					$response = { status => 503, message => "Proxy port for server \033[1m$server_name\033[0m not found. System error." };	
+					last CLIENT;
+				}
+
 				# connect to executor (via socks proxy)
 				eval {
 					$exec->{sock} = worker_connect(
-						type => 'socks',
-						port => $container_id
+						type      => 'socks',
+						port      => $container_id,
+						proxyport => $agent->{proxy_port}
 					);
 				} or do {
 					print "Cannot connect to proxy";

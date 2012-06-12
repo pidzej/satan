@@ -13,8 +13,6 @@ use Satan::Tools;
 use IO::Socket;
 use DBI;
 use Data::Dumper;
-#use Crypt::GeneratePassword qw(chars);
-#use Data::Password qw(:all);
 use Tie::File;
 use FindBin qw($Bin);
 use feature 'switch';
@@ -30,7 +28,7 @@ $SIG{CHLD} = 'IGNORE';
 
 Readonly my $NGINX_MAP_FILE    => '/etc/nginx/conf.d/map.conf';
 Readonly my $CONTAINER_NETWORK => '10.1.0.0';
-Readonly my @export_ok => qw( add del list );
+Readonly my @export_ok => qw( add del list help );
 
 sub get_data {
         my $self = shift;
@@ -68,7 +66,7 @@ sub reload_nginx {
 	
 	$db->{get_domain_list}->execute or die "Cannot get domain list from database.";
 	my @nginx_map;
-	push @nginx_map, join("\n\t", 'map $http_host $ipaddr {', 'hostnames;', "default\t127.0.0.1;\n");
+	push @nginx_map, join("\n\t", 'map .$http_host $ipaddr {', 'hostnames;', "default\t127.0.0.1;\n");
 	while(my ($uid, $domain_name) = $db->{get_domain_list}->fetchrow_array) {
 		my $ipaddr = Satan::Tools->get_container_ip( $uid, $CONTAINER_NETWORK );
 		push @nginx_map, "\t".join("\t", $domain_name, $ipaddr).";\n";
@@ -77,6 +75,7 @@ sub reload_nginx {
 	open MAP, '>', $NGINX_MAP_FILE or die "Cannot open file $NGINX_MAP_FILE";
 	print MAP @nginx_map;
 	close MAP;
+	system("sudo svc -h /etc/service/nginx");
 	return 1;
 }
 
@@ -93,7 +92,7 @@ sub add {
 	is_domain($domain_name)       or return "Not good! \033[1m$domain_name\033[0m is NOT a proper domain name.";
 		
 	# check if not official rootnode domain
-	if ($domain_name =~ /\.rootnode\.net$/ and $domain_name !~ /(^|\.)\Q$user_name\E\.rootnode\.net$/) {
+	if ($domain_name =~ /\.rootnode(?:status)?\.(?:net|pl)$/ and $domain_name !~ /(^|\.)\Q$user_name\E\.rootnode(?:status)?\.(?:net|pl)$/) {
 		return "You cannot use rootnode domains. Only \033[1m*.$user_name.rootnode.net\033[0m is allowed.";
 	}
 
@@ -125,7 +124,7 @@ sub del {
 	my $uid = $self->{uid};
 	my $db  = $self->{db};
 
-	# satan vhost del <domain>
+	# satan vhost del <domain> [purge]
 	my $domain_name = shift @args or return "Not enough arguments! \033[1mDomain name\033[0m NOT specified. Please die or read help.";
 	   $domain_name = lc $domain_name;
 	is_domain($domain_name)       or return "Not good! \033[1m$domain_name\033[0m is NOT a proper domain name.";
@@ -141,7 +140,8 @@ sub del {
 	} else {
 		return "Vhost \033[1m$domain_name\033[0m does NOT exist.";
 	}
-	
+
+	# reload nginx configuration
 	eval { 
 		$self->reload_nginx;
 	} 

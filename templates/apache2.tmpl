@@ -1,0 +1,17 @@
+<VirtualHost localhost:8080>
+    ServerName %%vhost_name%%
+    ServerAlias www.%%vhost_name%%
+    DocumentRoot %%vhost_path%%/htdocs
+
+    # Log files
+    LogLevel info
+    ErrorLog %%vhost_path%%/logs/apache2-error.log
+    CustomLog %%vhost_path%%/logs/apache2-access.log combined
+
+    <Directory %%vhost_path%%/htdocs>
+        Options Indexes FollowSymLinks
+        AllowOverride All
+        Order allow,deny
+        allow from all
+    </Directory> 
+</VirtualHost>

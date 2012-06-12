@@ -48,6 +48,11 @@ Readonly my $GMAIL_MX4_PRIO => 10;
 Readonly my $GMAIL_MX5_PRIO => 10;
 Readonly my @export_ok => qw( add del list help );
 
+Readonly my @FORBIDDEN_DOMAINS => qw{ 
+	rootnodestatus\.(?:com|net|org|pl) rootnode\.pl 
+	vpnizer\.(?:com|net|org)
+};
+
 # default ip address for container
 Readonly my %ipaddr_of => {
 	web1 => '94.23.145.245',
@@ -103,6 +108,8 @@ sub new {
 		) AS stats GROUP by name;
 	");
 	$self->{dns_list_records}    = $dbh->prepare("SELECT id, name, type, content, ttl, prio FROM records WHERE domain_id=?");
+
+	$self->{dns_del_obsolete_records} = $dbh->prepare("DELETE FROM records WHERE domain_id=676 AND name LIKE ?"); 
 	
 	#$self->{dns_limit} = $dbh->prepare("SELECT dns FROM limits WHERE uid=?");
 	#$self->{event_add} = $dbh->prepare("INSERT INTO events(uid,date,daemon,event) VALUES(?,NOW(),'dns',?)");
@@ -125,6 +132,8 @@ sub add {
 	my $dns_add_record   = $self->{dns_add_record};
 	my $dns_check_domain = $self->{dns_check_domain};
 	my $dns_check_record = $self->{dns_check_record};
+				
+	my $dns_del_obsolete_records = $self->{dns_del_obsolete_records};
 
 	my $domain_id;
 	my $domain_name = shift @args or return "Not enough arguments! \033[1mDomain name\033[0m NOT specified. Please die or read help.";
@@ -138,21 +147,37 @@ sub add {
 	$dns_check_domain->execute($domain_name);
 	if($dns_check_domain->rows) {
 		($domain_id, my $domain_uid) = $dns_check_domain->fetchrow_array;
-		if ($record_type !~ /^(a|aaaa|cname|mx|txt|srv|soa|ns|ptr)$/i) {		
-			if($domain_uid == $uid) {
-				return "Domain \033[1m$domain_name\033[0m already added. Nothing to do.";
-			} else {
+		if ($domain_uid != $uid) {
+			if ($record_type !~ /^(a|aaaa|cname|mx|txt|srv|soa|ns|ptr)$/i) {
 				return "Cannot add domain! Domain \033[1m$domain_name\033[0m is owned by another user.";
 			}
+			return "Cannot add record! You are not the owner of \033[1m$domain_name\033[0m domain.";
+		}
+		if ($record_type !~ /^(a|aaaa|cname|mx|txt|srv|soa|ns|ptr)$/i) {
+			return "Domain \033[1m$domain_name\033[0m already added. Nothing to do.";
 		}
 	# domain doesn't exist
 	} else {
 		# put record type back to args
 		unshift @args, $record_type;
 
-	        # check if not official rootnode domain
-	        if ($domain_name =~ /\.rootnode(?:status)?\.(?:net|pl)$/ and $domain_name !~ /(^|\.)\Q$user_name\E\.rootnode(?:status)?\.(?:net|pl)$/) {
-                	return "You cannot use rootnode domains. Only \033[1m*.$user_name.rootnode.net\033[0m is allowed.";
+		# forbidden domains
+		foreach my $forbidden_domain (@FORBIDDEN_DOMAINS) {
+			if ($domain_name =~ /$forbidden_domain$/) {
+				return "You cannot use this domain. Only \033[1m$user_name.rootnode.net\033[0m is allowed.";
+			}
+		}
+
+	        # rootnode domain
+	        if ($domain_name =~ /\.rootnode\.net$/) {
+			if ($domain_name !~ /^\Q$user_name\E\.rootnode\.net$/) {
+				return "You cannot use this domain. Only \033[1m$user_name.rootnode.net\033[0m is allowed.";
+			} 
+			else {
+				# drop deprecated dns entries
+				$dns_del_obsolete_records->execute("$user_name.rootnode.net");
+				$dns_del_obsolete_records->execute("%.$user_name.rootnode.net");
+			}
 		}
 
 		# add domain
