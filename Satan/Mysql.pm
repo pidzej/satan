@@ -20,6 +20,7 @@ use Crypt::GeneratePassword qw(chars);
 use Data::Password qw(:all);
 use Data::Dumper;
 use Readonly;
+use Smart::Comments;
 
 Readonly my @export_ok => qw( add del list help );
 
@@ -78,6 +79,8 @@ sub add {
 	# database or user name
 	my $name = shift @args or return "Not enough arguments! \033[1mDatabase name\033[0m NOT specified. Please die or read help.";
 	   $name = lc $name;
+
+	### $name
 	
 	# add user command
 	my $is_user;
@@ -106,7 +109,7 @@ sub add {
 		my $maximum_name_length = $real_name_length - length('my'.$uid.'_');
 		return "$name_type name too long (\033[1m$real_name_length\033[0m chars). Maximum length is \033[1m$maximum_name_length\033[0m.";
 	}
-		
+
 	# user or grant user password
 	my $user_password = shift @args or return "Not enough parameters! \033[1mUser password\033[0m NOT specified.";
 	my $bad_password_reason = IsBadPassword($user_password);
@@ -121,10 +124,9 @@ sub add {
 		if ($db->{check_user}->rows) {
 			return "User \033[1m$name\033[0m already added. Nothing to do.";
 		}
-		else {
-			# add database
-			$db->{add_user}->execute($real_name, $user_password) or return "Cannot add user \033[1m$real_name\033[0m. System error.";
-		}
+		
+		# add database
+		$db->{add_user}->execute($real_name, $user_password) or return "Cannot add user \033[1m$real_name\033[0m. System error.";
 	}
 	# add database
 	else {
@@ -139,13 +141,14 @@ sub add {
 		if ($db->{check_db}->rows) {
 			return "Database \033[1m$name\033[0m already added. Nothing to do.";
 		} 
-		else {
-			# add database
-			#$db->{add_db}->execute($real_name) or return "Cannot add database \033[1m$real_name\033[0m. System error.";
-			$db->{dbh}->func('createdb', $real_name, 'admin') or return "Cannot add database \033[1m$real_name\033[0m. System error.";
-			$db->{dbh}->do(qq{ GRANT ALL PRIVILEGES ON $real_name.* TO $real_name WITH GRANT OPTION })
-				or return "Cannot set privileges to \033[1m$real_name\033[0m user. System error.";
-		}
+
+		### Add database: $real_name
+		### Add userr pass: $user_password
+
+		# add database
+		$db->{dbh}->func('createdb', $real_name, 'admin') or return "Cannot add database \033[1m$real_name\033[0m. System error.";
+		$db->{dbh}->do(qq{ GRANT ALL PRIVILEGES ON $real_name.* TO $real_name IDENTIFIED BY '$user_password' WITH GRANT OPTION })
+			or return "Cannot set privileges to \033[1m$real_name\033[0m user. System error.";
 	}
 	
 	return;
@@ -185,28 +188,24 @@ sub del {
 	if ($is_user) {
 		# check if user exists
 		$db->{check_user}->execute($real_name);
-		if ($db->{check_user}->rows) {
-			# delete
-			$db->{del_user}->execute($real_name) or return "Cannot delete user \033[1m$real_name\033[0m. System error.";
-		}
-		else {
+		if (!$db->{check_user}->rows) {
 			return "User \033[1m$name\033[0m does NOT exist.";
 		}
+
+		# drop user
+		$db->{del_user}->execute($real_name) or return "Cannot delete user \033[1m$real_name\033[0m. System error.";
 	}
 	# delete database
 	else {
 		# check if database exists
 		$db->{check_db}->execute($real_name);
-		if ($db->{check_db}->rows) {
-			$db->{dbh}->func('dropdb', $real_name, 'admin') or return "Cannot delete database \033[1m$real_name\033[0m. System error.";
-			$db->{del_user}->execute($real_name);
-		} 
-		else {
-			# add database
-			#$db->{add_db}->execute($real_name) or return "Cannot add database \033[1m$real_name\033[0m. System error.";
+		if (!$db->{check_db}->rows) {
 			return "Database \033[1m$name\033[0m does NOT exist.";
 		}
-
+			
+		# drop database and user
+		$db->{dbh}->func('dropdb', $real_name, 'admin') or return "Cannot delete database \033[1m$real_name\033[0m. System error.";
+		$db->{del_user}->execute($real_name);
 	}
 	
 	return; 
