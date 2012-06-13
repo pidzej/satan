@@ -56,6 +56,7 @@ Readonly my @FORBIDDEN_DOMAINS => qw{
 # default ip address for container
 Readonly my %ipaddr_of => {
 	web1 => '94.23.145.245',
+	web2 => '94.23.146.10',
 };
 
 $|++;

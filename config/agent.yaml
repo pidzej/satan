@@ -1,5 +1,4 @@
 # Agent port configuration
-
 admin:
     default: 1666
 
@@ -19,5 +18,5 @@ vhost:
     web2: 1802
 
 socks:
-    web1: 1701
-    web2: 1702
+    web1: 1501
+    web2: 1502
