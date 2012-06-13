@@ -106,7 +106,6 @@ while(my $s_server = $s_agent->accept()) {
 		# get available command names
 		my %export_ok = $service->get_export;
 		
-
 		### Request: @request
 
 		# send command

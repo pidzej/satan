@@ -27,7 +27,6 @@ $|++;
 $SIG{CHLD} = 'IGNORE';
 
 Readonly my $NGINX_MAP_FILE    => '/etc/nginx/conf.d/map.conf';
-Readonly my $CONTAINER_NETWORK => '10.1.0.0';
 Readonly my @export_ok => qw( add del list help );
 
 sub get_data {
@@ -62,19 +61,30 @@ sub new {
 	
 sub reload_nginx {
 	my $self = shift;
-	my $db = $self->{db};
+	my $db        = $self->{db};
+	my $server_id = $self->{server_id};
+
+	# Container network based on server ID
+	my $container_network = '10.' . $server_id . '.0.0';
 	
+	# Get domain list
 	$db->{get_domain_list}->execute or die "Cannot get domain list from database.";
+	
+	# Prepare nginx map
 	my @nginx_map;
 	push @nginx_map, join("\n\t", 'map $http_host $ipaddr {', 'hostnames;', "default\t127.0.0.1;\n");
 	while(my ($uid, $domain_name) = $db->{get_domain_list}->fetchrow_array) {
-		my $ipaddr = Satan::Tools->get_container_ip( $uid, $CONTAINER_NETWORK );
+		my $ipaddr = Satan::Tools->get_container_ip( $uid, $container_network );
 		push @nginx_map, "\t".join("\t", $domain_name, $ipaddr).";\n";
 	}
 	push @nginx_map, "}\n";
+
+	# Save nginx map to file
 	open MAP, '>', $NGINX_MAP_FILE or die "Cannot open file $NGINX_MAP_FILE";
 	print MAP @nginx_map;
 	close MAP;
+
+	# Reload nginx server
 	system("sudo svc -h /etc/service/nginx");
 	return 1;
 }

@@ -1,0 +1,9 @@
+# Server parameters
+
+web1:
+    id: 1
+    ipaddr: 176.31.234.143
+
+web2:
+    id: 2
+    ipaddr: 176.31.238.43

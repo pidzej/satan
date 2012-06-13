@@ -48,8 +48,9 @@ our $MINLEN = undef;
 our $MAXLEN = undef;
 
 # configuration
-my $agent_conf = YAML::LoadFile("$Bin/../config/agent.yaml");
-my $exec_conf  = YAML::LoadFile("$Bin/../config/exec.yaml");
+my $agent_conf  = YAML::LoadFile("$Bin/../config/agent.yaml");
+my $server_conf = YAML::LoadFile("$Bin/../config/server.yaml");
+my $exec_conf   = YAML::LoadFile("$Bin/../config/exec.yaml");
 Readonly my $ADMIN_HOST => '10.1.0.1';
 Readonly my $SATAN_HOST => '0.0.0.0';
 Readonly my $SATAN_PORT => 1600;
@@ -58,6 +59,10 @@ Readonly my $PROXY_PORT_PREFIX => 17;
 
 # json serialization
 my $json = JSON::XS->new->utf8;
+
+# server information
+my %server_name_for_id   = map { $server_conf->{$_}->{id} => $_                           } keys %$server_conf;
+my %server_ipaddr_for_id = map { $server_conf->{$_}->{id} => $server_conf->{$_}->{ipaddr} } keys %$server_conf; 
 
 # usage
 my $satan_services = join(q[ ], sort grep { $_ !~ /^(admin|socks)$/ } keys %$agent_conf);
@@ -101,7 +106,6 @@ sub db_connect {
 	# db statements
 	$db->{get_user_credentials}  = $dbh->prepare("SELECT user_name        FROM user_auth   WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
 	$db->{get_admin_credentials} = $dbh->prepare("SELECT user_name, privs FROM admin_auth  WHERE uid=? AND auth_key=PASSWORD(?) LIMIT 1");
-	$db->{get_server_name}       = $dbh->prepare("SELECT id, server_name  FROM server_list WHERE id=?");  
 	
 	return $db;
 }
@@ -122,8 +126,9 @@ while(my $s_client = $s_server->accept()) {
 		# check server name
 		if ($client->{ipaddr} =~ /^127\.16\.\d+\.(\d+)$/ or $client->{ipaddr} eq $ADMIN_HOST) {
 			my $server_id = $1;
-			$db->{get_server_name}->execute($server_id);
-			( $client->{server_id}, $client->{server_name} ) = $db->{get_server_name}->fetchrow_array;
+			$client->{server_id}     = $server_id;
+			$client->{server_name}   = $server_name_for_id{$server_id};
+			$client->{server_ipaddr} = $server_ipaddr_for_id{$server_id};
 		} 
 		else {
 			$response = { status => 400, message => "Request came from unknown server ($client->{ipaddr})." };
@@ -414,12 +419,4 @@ CREATE TABLE admin_auth (
 	auth_key CHAR(41) NOT NULL,
 	privs VARCHAR(255) DEFAULT '',
 	PRIMARY KEY(uid)
-) ENGINE=InnoDB, CHARACTER SET=UTF8;
-
-CREATE TABLE server_list (
-	id TINYINT UNSIGNED NOT NULL, 
-	server_name VARCHAR(16) NOT NULL,
-	ip_address CHAR(15) NOT NULL,
-	PRIMARY KEY(id),
-	KEY(ip_address)
 ) ENGINE=InnoDB, CHARACTER SET=UTF8;
