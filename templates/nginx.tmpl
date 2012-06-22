@@ -5,10 +5,14 @@ server {
     root %%vhost_path%%/htdocs;
     index index.html index.php;
 
-    # Log files    
-    access_log %%vhost_path%%/logs/nginx-access.log;
-    #access_log off;
-    error_log  %%vhost_path%%/logs/nginx-error.log info;
+    # To enable logging uncomment following lines
+    # Opening logs have serious impact on I/O performance
+    # Use only when really needed
+   
+    access_log off;
+    error_log /dev/null;
+    # access_log %%vhost_path%%/logs/nginx-access.log;
+    # error_log  %%vhost_path%%/logs/nginx-error.log info;
 
     # Static files handled by Nginx
     location / {
@@ -33,6 +37,13 @@ server {
     location @proxy {
         internal;
         include /etc/nginx/proxy.conf;
+	
+	# Cache
+	proxy_cache nginx-cache;
+	proxy_cache_valid  200 302  5m;
+	proxy_cache_valid  404      1m;
+	add_header X-Cache-Status $upstream_cache_status;
+
         proxy_pass http://localhost:8080;
     }
 }
