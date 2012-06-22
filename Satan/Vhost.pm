@@ -75,7 +75,7 @@ sub reload_nginx {
 	push @nginx_map, join("\n\t", 'map $http_host $ipaddr {', 'hostnames;', "default\t127.0.0.1;\n");
 	while(my ($uid, $domain_name) = $db->{get_domain_list}->fetchrow_array) {
 		my $ipaddr = Satan::Tools->get_container_ip( $uid, $container_network );
-		push @nginx_map, "\t".join("\t", $domain_name, $ipaddr).";\n";
+		push @nginx_map, "\t".join("\t", ".$domain_name", $ipaddr).";\n";
 	}
 	push @nginx_map, "}\n";
 
