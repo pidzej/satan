@@ -17,6 +17,7 @@ use File::Copy;
 use File::Slurp;
 use IO::Socket;
 use Digest::MD5 qw(md5_base64);
+use Rootnode::Password qw(apg);
 use Readonly;
 no Smart::Comments;
 use Data::Dumper;
