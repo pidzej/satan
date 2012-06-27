@@ -17,10 +17,11 @@ use File::Copy;
 use File::Slurp;
 use IO::Socket;
 use Digest::MD5 qw(md5_base64);
-use Rootnode::Password qw(apg);
 use Readonly;
+use FindBin qw($Bin);
+use lib $Bin;
+use Rootnode::Password qw(apg);
 no Smart::Comments;
-use Data::Dumper;
 
 $|++;
 $SIG{CHLD} = 'IGNORE'; # braaaaains!!!
