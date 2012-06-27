@@ -267,6 +267,9 @@ sub vhost_add {
 		}
 	}
 
+	# generate wordpress key
+	my $wordpress_key = apg(8,12);
+
 	# apache2 config
 	my $apache2_config_file = "/etc/apache2/sites-available/$vhost_name";
 
@@ -296,8 +299,9 @@ sub vhost_add {
 		my $nginx_config;
 		eval {
 			$nginx_config = template('nginx', {
-				vhost_name => $vhost_name,
-				vhost_path => $vhost_path,
+				vhost_name    => $vhost_name,
+				vhost_path    => $vhost_path,
+				wordpress_key => $wordpress_key,
 			});
 		}
 		or do {
