@@ -33,10 +33,8 @@ server {
     #     header("Location: http://%%vhost_name%%/wp-admin");
     # ?>
         
-    set $wordpress_key %%wordpress_key%%;
-
     location ~ ^/(wp-admin|wp-login.php) {
-        if ($http_cookie ~ $wordpress_key) {
+        if ($http_cookie ~ '%%wordpress_key%%') {
             return 418;
         }
 
