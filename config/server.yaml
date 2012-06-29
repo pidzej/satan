@@ -7,3 +7,7 @@ web1:
 web2:
     id: 2
     ipaddr: 176.31.238.43
+
+web3:
+    id: 3
+    ipaddr: 178.33.238.146

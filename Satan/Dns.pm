@@ -57,6 +57,7 @@ Readonly my @FORBIDDEN_DOMAINS => qw{
 Readonly my %ipaddr_of => {
 	web1 => '94.23.145.245',
 	web2 => '94.23.146.10',
+	web3 => '94.23.149.68',
 };
 
 $|++;

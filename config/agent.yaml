@@ -8,15 +8,19 @@ dns:
 ftp:
     web1: 11201
     web2: 11202
+    web3: 11203
 
 mysql:
     web1: 11001
     web2: 11002
+    web3: 11003
 
 vhost:
     web1: 1801
     web2: 1802
+    web3: 1803
 
 socks:
     web1: 1501
     web2: 1502
+    web3: 1503
