@@ -16,8 +16,8 @@ server {
 
     # Logs have serious impact on I/O performance
     # Use for debugging only
-    # access_log /home/ahes/web/%%vhost_name%%/logs/nginx-access.log;
-    # error_log  /home/ahes/web/%%vhost_name%%/logs/nginx-error.log crit;
+    # access_log %%vhost_path%%/logs/nginx-access.log;
+    # error_log  %%vhost_path%%/logs/nginx-error.log crit;
     access_log off;
     error_log /dev/null crit;
 
@@ -67,7 +67,15 @@ server {
         proxy_cache_key $cache_key;
         proxy_cache_valid 200 301 302 10m;
 
-        ### Wordpress
+	# Do not cache when Pragma or Authorization header exist
+	# Use without pragma when slashdot effect
+	# proxy_cache_bypass $http_authorization;
+	proxy_cache_bypass $http_pragma $http_authorization;
+	
+	# Uncomment to cache everything
+	# proxy_ignore_headers Cache-Control Expires;
+        
+	### Wordpress
         # Do not cache logged in user
         include /etc/nginx/conf.d/wordpress-cache.conf;
         #
