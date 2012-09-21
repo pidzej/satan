@@ -27,7 +27,10 @@ $|++;
 $SIG{CHLD} = 'IGNORE';
 
 Readonly my $NGINX_MAP_FILE    => '/etc/nginx/conf.d/map.conf';
-Readonly my @export_ok => qw( add del list help );
+Readonly my %EXPORT_OK => (
+        user  => [ qw( add del list help ) ],
+        admin => [ qw( deluser ) ]
+);
 
 sub get_data {
         my $self = shift;
@@ -35,7 +38,8 @@ sub get_data {
 }
 
 sub get_export {
-        my $self = shift;
+        my ($self, $user_type) = @_;
+        my @export_ok = @{ $EXPORT_OK{$user_type} };
         my %export_ok = map { $_ => 1 } @export_ok;
         return %export_ok;
 }

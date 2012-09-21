@@ -18,6 +18,7 @@ use Data::Password qw(:all);
 use FindBin qw($Bin);
 use Data::Validate::Domain qw(is_domain is_hostname);
 use Data::Validate::IP qw(is_ipv4 is_ipv6);
+use POSIX qw(isdigit);
 no Smart::Comments;
 use Readonly;
 use feature 'switch';
@@ -46,7 +47,15 @@ Readonly my $GMAIL_MX2_PRIO => 5;
 Readonly my $GMAIL_MX3_PRIO => 5;
 Readonly my $GMAIL_MX4_PRIO => 10;
 Readonly my $GMAIL_MX5_PRIO => 10;
+Readonly my $MIN_UID        => 2000;
+Readonly my $MAX_UID        => 6000;
 Readonly my @export_ok => qw( add del list help );
+
+Readonly my %EXPORT_OK => (
+        user  => [ qw( add del list help ) ],
+        admin => [ qw( deluser ) ]
+);
+
 
 Readonly my @FORBIDDEN_DOMAINS => qw{ 
 	rootnodestatus\.(?:com|net|org|pl) rootnode\.pl 
@@ -71,7 +80,8 @@ sub get_data {
 }
 
 sub get_export {
-        my $self = shift;
+        my ($self, $user_type) = @_;
+        my @export_ok = @{ $EXPORT_OK{$user_type} };
         my %export_ok = map { $_ => 1 } @export_ok;
         return %export_ok;
 }
@@ -112,6 +122,8 @@ sub new {
 	$self->{dns_list_records}    = $dbh->prepare("SELECT id, name, type, content, ttl, prio FROM records WHERE domain_id=?");
 
 	$self->{dns_del_obsolete_records} = $dbh->prepare("DELETE FROM records WHERE domain_id=676 AND name LIKE ?"); 
+
+	$self->{dns_deluser_domains} = $dbh->prepare("DELETE FROM domains WHERE uid=?");
 	
 	#$self->{dns_limit} = $dbh->prepare("SELECT dns FROM limits WHERE uid=?");
 	#$self->{event_add} = $dbh->prepare("INSERT INTO events(uid,date,daemon,event) VALUES(?,NOW(),'dns',?)");
@@ -121,6 +133,31 @@ sub new {
 	
 	bless $self, $class;
 	return $self;
+}
+
+sub deluser {
+	my ($self, @args) = @_;
+	my $uid = $self->{uid};
+	my $dbh = $self->{dbh};
+	my $user_name   = $self->{user_name};
+	my $user_type   = $self->{type};
+	my $server_name = $self->{server_name};
+
+	my $dns_deluser_domains = $self->{mail_deluser_domains};
+
+	# Get uid to delete
+	my $delete_uid = shift @args or return "Not enough arguments! \033[1mUid\033[0m NOT specified.";
+	isdigit($delete_uid)   or return "Uid must be a number!";
+	$delete_uid < $MIN_UID and return "Uid too low. (< $MIN_UID)";
+	$delete_uid > $MAX_UID and return "Uid too high. (> $MAX_UID)";
+
+	# Check user type
+	$user_type eq 'admin' or return "Access denied!";
+	
+	# Delete user resources
+	$dns_deluser_domains->execute($delete_uid) or return "Couldn't remove user $delete_uid. Database error.";
+
+	return;
 }
 
 sub add {

@@ -38,12 +38,15 @@ Readonly my $PAM_PASSWORD_MINLEN  => 14;
 Readonly my $PAM_PASSWORD_MAXLEN  => 18;
 Readonly my $SATAN_KEY_MINLEN => 14;
 Readonly my $SATAN_KEY_MAXLEN => 16;
-Readonly my @export_ok => qw( adduser deluser passwd );
+
+Readonly my %EXPORT_OK => (
+	user  => [],
+	admin => [ qw( adduser deluser passwd ) ]
+);
 
 # Data::Password 
 our $MINLEN = undef;
 our $MAXLEN = undef;
-
 
 sub get_data {
         my $self = shift;
@@ -51,7 +54,8 @@ sub get_data {
 }
 
 sub get_export {
-	my $self = shift;
+	my ($self, $user_type) = @_;
+	my @export_ok = @{ $EXPORT_OK{$user_type} };
 	my %export_ok = map { $_ => 1 } @export_ok;
 	return %export_ok;
 }

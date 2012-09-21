@@ -5,6 +5,9 @@ admin:
 dns:
     default: 1609
 
+mail:
+    default: 1611
+
 ftp:
     web1: 11201
     web2: 11202

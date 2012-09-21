@@ -104,14 +104,12 @@ while(my $s_server = $s_agent->accept()) {
 		my $service = $agent->{module}->new($client);
 
 		# get available command names
-		my %export_ok = $service->get_export;
+		my %export_ok = $service->get_export($client->{type});
 		
-		### Request: @request
-
 		# send command
 		if ($export_ok{$command_name}) {
 			$agent->{response} = $service->$command_name(@request);
-		} 
+		}
 		else {
 			my $available_commands = join q{, }, sort keys %export_ok;
 			my $help_message = "Command \033[1m$command_name\033[0m is NOT available. "
