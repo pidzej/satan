@@ -11,7 +11,47 @@ package Satan::Tools;
 use warnings;
 use strict;
 use FindBin qw($Bin);
+use Net::DNS;
 use Data::Dumper;
+
+
+sub txt {
+	my ($self, $domain_name) = @_;
+
+	# Ask local resolver for domain NS records
+	my $local_resolver = Net::DNS::Resolver->new;
+	my $ns_query = $local_resolver->query($domain_name, 'NS') or return;
+
+	my @domain_ns;
+	foreach my $rr ($ns_query->answer) {
+		next unless $rr->type eq 'NS';
+		push @domain_ns, $rr->nsdname;
+	}
+	
+	# Ask domain resolver for TXT record
+	my $domain_resolver = Net::DNS::Resolver->new(
+		nameservers => [ sort @domain_ns ]
+	);
+
+	my $txt_query = $domain_resolver->query($domain_name, 'TXT') or return;
+
+	foreach my $rr ( $txt_query->answer ) {
+		next unless $rr->type eq 'TXT';
+		my $txt_record = $rr->txtdata;
+		if ($txt_record =~ /^rootnode\s/) {
+			my @params = split /\s+/, $txt_record;
+			my $value_for;
+			for (@params) {
+				my ($key, $val) = split /=/;
+				next if !defined $key or !defined $val;
+				next if $key eq '' or $val eq '';
+				$value_for->{$key} = $val;
+			}
+			return $value_for;
+		}
+	}
+	return;
+}
 
 sub get_container_ip {
         my($self, $id, $network) = @_;
