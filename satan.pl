@@ -214,7 +214,8 @@ while(my $s_client = $s_server->accept()) {
 				my %privs = map { $_ => 1 } @privs;       # store as hash
 
 				# check if privileged
-				if (not defined $privs{$command_name} or $service_name ne 'admin') { 
+				my $priv_name = "$service_name/$command_name";
+				if (not defined $privs{$priv_name}) {
 					$response = { status => 401, message => 'Unauthorized.' };
 					last CLIENT;
 				}				
