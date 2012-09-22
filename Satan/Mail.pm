@@ -14,13 +14,14 @@ use utf8;
 use Satan::Tools qw(caps txt);
 use IO::Socket;
 use File::Copy;
+use File::Path qw(make_path);
 use Crypt::GeneratePassword qw(chars);
 use Data::Password qw(:all);
 use FindBin qw($Bin);
 use Data::Validate::Email qw(is_email);
 use Data::Validate::Domain qw(is_domain is_hostname);
 use Data::Validate::IP qw(is_ipv4 is_ipv6);
-use POSIX qw(isdigit);
+use POSIX qw(isdigit strftime);
 use Readonly;
 use DBI;
 use Smart::Comments;
@@ -29,8 +30,9 @@ use Smart::Comments;
 Readonly my $DOVEADM_BIN             => '/usr/bin/doveadm';
 Readonly my $DEFAULT_PASSWORD_SCHEME => 'SHA512-CRYPT';
 Readonly my $DEFAULT_HOME_DIR        => '/home/mail';
-Readonly my $MIN_UID => 2000;
-Readonly my $MAX_UID => 6000;
+Readonly my $MAIL_DIR_GID            => 500;
+Readonly my $MIN_UID                 => 2000;
+Readonly my $MAX_UID                 => 6000;
 Readonly my %EXPORT_OK => (
         user  => [ qw( add del list passwd help ) ],
         admin => [ qw( deluser ) ]
@@ -136,7 +138,16 @@ sub deluser {
         # Check user type
         $user_type eq 'admin' or return "Access denied!";
 
-        # Delete user resources
+        # Delete user files
+	my $user_dir = "$DEFAULT_HOME_DIR/$delete_uid";
+
+	my $current_date = strftime("%Y-%m-%d", localtime(time));
+	my $deleted_user_dir = "$DEFAULT_HOME_DIR/deleted-$delete_uid-$current_date";
+	if (-d $user_dir) {
+		move( $user_dir, $deleted_user_dir ) or return "Cannot remove user directory. System error ($!).";
+	}
+
+	# Delete database records
         $mail_deluser_domains->execute($delete_uid) or return "Couldn't remove user $delete_uid. Database error.";
 
         return;
@@ -195,6 +206,10 @@ sub add {
 		if (-d $deleted_domain_dir) {
 			move( $deleted_domain_dir, $domain_dir ) or return "Cannot restore mail domain directory. System error.";
 		}
+		else {
+			umask 0007;
+			make_path( $domain_dir, { group => $MAIL_DIR_GID } ) or return "Cannot create mail domain directory. System error.";
+		}
 
 		# Add domain
 		$mail_add_domain->execute($uid, $domain_name);
@@ -246,6 +261,11 @@ sub add {
 		my $deleted_mailbox_dir = "$mailbox_dir (deleted)";
 		if (-d $deleted_mailbox_dir) {
 			move( $deleted_mailbox_dir, $mailbox_dir ) or return "Cannot restore mailbox directory. System error.";
+		} 
+		else {
+			### $mailbox_dir
+			umask 0007;
+			make_path( $mailbox_dir, { group => $MAIL_DIR_GID } ) or return "Cannot create mailbox directory. System error.";
 		}
 
 		# Generate user password crypt
