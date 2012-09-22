@@ -49,13 +49,11 @@ Readonly my $GMAIL_MX4_PRIO => 10;
 Readonly my $GMAIL_MX5_PRIO => 10;
 Readonly my $MIN_UID        => 2000;
 Readonly my $MAX_UID        => 6000;
-Readonly my @export_ok => qw( add del list help );
 
 Readonly my %EXPORT_OK => (
         user  => [ qw( add del list help ) ],
         admin => [ qw( deluser ) ]
 );
-
 
 Readonly my @FORBIDDEN_DOMAINS => qw{ 
 	rootnodestatus\.(?:com|net|org|pl) rootnode\.pl 

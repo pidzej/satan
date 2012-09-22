@@ -24,6 +24,7 @@ use Satan::Dns;
 use Satan::Mysql;
 use Satan::Vhost;
 use Satan::Ftp;
+use Satan::Mail;
 
 our $MINLEN = undef;
 our $MAXLEN = undef;
@@ -114,7 +115,7 @@ while(my $s_server = $s_agent->accept()) {
 			my $available_commands = join q{, }, sort keys %export_ok;
 			my $help_message = "Command \033[1m$command_name\033[0m is NOT available. "
 			                 . "Available commands are: \033[1;32m$available_commands\033[0m\n"
-			                 . "Run \033[1;34satan $service_name help\033[0m for help or visit "
+			                 . "Run \033[1;34msatan $service_name help\033[0m for help or visit "
 			                 . "http://rootnode.net/satan/$service_name for details.";
 			
 			$response = { status => 400, message => $help_message };

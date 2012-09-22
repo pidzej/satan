@@ -29,7 +29,12 @@ use Smart::Comments;
 Readonly my $DOVEADM_BIN             => '/usr/bin/doveadm';
 Readonly my $DEFAULT_PASSWORD_SCHEME => 'SHA512-CRYPT';
 Readonly my $DEFAULT_HOME_DIR        => '/home/mail';
-Readonly my @export_ok => qw( add del list passwd help );
+Readonly my $MIN_UID => 2000;
+Readonly my $MAX_UID => 6000;
+Readonly my %EXPORT_OK => (
+        user  => [ qw( add del list passwd help ) ],
+        admin => [ qw( deluser ) ]
+);
 
 # default ip address for container
 Readonly my %ipaddr_of => {
@@ -49,7 +54,8 @@ sub get_data {
 }
 
 sub get_export {
-        my $self = shift;
+        my ($self, $user_type) = @_;
+        my @export_ok = @{ $EXPORT_OK{$user_type} };
         my %export_ok = map { $_ => 1 } @export_ok;
         return %export_ok;
 }
@@ -102,10 +108,38 @@ sub new {
 		WHERE a.domain_id=?
 	");
 
+	$self->{mail_deluser_domains} = $dbh->prepare("DELETE FROM domains WHERE uid=?");
 	$self->{dbh} = $dbh;
 
 	bless $self, $class;
 	return $self;
+}
+
+sub deluser {
+        my ($self, @args) = @_;
+        my $uid = $self->{uid};
+        my $dbh = $self->{dbh};
+        my $user_name   = $self->{user_name};
+        my $user_type   = $self->{type};
+        my $server_name = $self->{server_name};
+        
+	my $mail_deluser_domains = $self->{mail_deluser_domains};
+
+        # Get uid to delete
+        my $delete_uid = shift @args or return "Not enough arguments! \033[1mUid\033[0m NOT specified.";
+        
+	# Check uid
+	isdigit($delete_uid)   or return "Uid must be a number!";
+        $delete_uid < $MIN_UID and return "Uid too low. (< $MIN_UID)";
+        $delete_uid > $MAX_UID and return "Uid too high. (> $MAX_UID)";
+
+        # Check user type
+        $user_type eq 'admin' or return "Access denied!";
+
+        # Delete user resources
+        $mail_deluser_domains->execute($delete_uid) or return "Couldn't remove user $delete_uid. Database error.";
+
+        return;
 }
 
 sub add {
