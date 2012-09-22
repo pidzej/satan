@@ -24,7 +24,7 @@ use Data::Validate::IP qw(is_ipv4 is_ipv6);
 use POSIX qw(isdigit strftime);
 use Readonly;
 use DBI;
-use Smart::Comments;
+no Smart::Comments;
 
 # configuration
 Readonly my $DOVEADM_BIN             => '/usr/bin/doveadm';
@@ -204,11 +204,13 @@ sub add {
 		my $domain_dir = "$DEFAULT_HOME_DIR/$uid/$domain_name";
 		my $deleted_domain_dir = "$domain_dir (deleted)";
 		if (-d $deleted_domain_dir) {
-			move( $deleted_domain_dir, $domain_dir ) or return "Cannot restore mail domain directory. System error.";
+			move( $deleted_domain_dir, $domain_dir ) or return "Cannot restore mail domain directory. System error ($!).";
 		}
-		else {
+
+		# Create domain directory
+		if (! -d $domain_dir) {
 			umask 0007;
-			make_path( $domain_dir, { group => $MAIL_DIR_GID } ) or return "Cannot create mail domain directory. System error.";
+			make_path( $domain_dir, { group => $MAIL_DIR_GID } ) or return "Cannot create mail domain directory. System error ($!).";
 		}
 
 		# Add domain
@@ -260,16 +262,18 @@ sub add {
 		my $mailbox_dir = "$DEFAULT_HOME_DIR/$uid/$domain_part/$user_part";
 		my $deleted_mailbox_dir = "$mailbox_dir (deleted)";
 		if (-d $deleted_mailbox_dir) {
-			move( $deleted_mailbox_dir, $mailbox_dir ) or return "Cannot restore mailbox directory. System error.";
+			move( $deleted_mailbox_dir, $mailbox_dir ) or return "Cannot restore mailbox directory. System error ($!).";
 		} 
-		else {
+	
+		# Create mailbox directory
+		if (! -d $mailbox_dir) {
 			### $mailbox_dir
 			umask 0007;
-			make_path( $mailbox_dir, { group => $MAIL_DIR_GID } ) or return "Cannot create mailbox directory. System error.";
+			make_path( $mailbox_dir, { group => $MAIL_DIR_GID } ) or return "Cannot create mailbox directory. System error ($!).";
 		}
 
 		# Generate user password crypt
-		my $user_password_crypt = `$DOVEADM_BIN pw -s$DEFAULT_PASSWORD_SCHEME -p$user_password` or return "Cannot generate user password! System error.";
+		my $user_password_crypt = `$DOVEADM_BIN pw -s$DEFAULT_PASSWORD_SCHEME -p$user_password` or return "Cannot generate user password! System error ($!).";
 		chomp $user_password_crypt;
 		
 		# Add mail account
@@ -369,7 +373,7 @@ sub del {
 		my $domain_dir = "$DEFAULT_HOME_DIR/$uid/$domain_name";
 		my $deleted_domain_dir = "$domain_dir (deleted)";
 		if (-d $domain_dir) {
-			move( $domain_dir, $deleted_domain_dir ) or return "Cannot remove mail domain directory. System error.";
+			move( $domain_dir, $deleted_domain_dir ) or return "Cannot remove mail domain directory. System error ($!).";
 		}
 
 		# Remove domain
@@ -406,7 +410,7 @@ sub del {
 		### $mailbox_dir
 		my $deleted_mailbox_dir = "$mailbox_dir (deleted)";
 		if (-d $mailbox_dir) {
-			move( $mailbox_dir, $deleted_mailbox_dir ) or return "Cannot remove mailbox directory. System error.";
+			move( $mailbox_dir, $deleted_mailbox_dir ) or return "Cannot remove mailbox directory. System error ($!).";
 		}
 	
 		# Remove user from database
@@ -502,7 +506,7 @@ sub passwd {
 	}
 
 	# Generate user password crypt
-	my $user_password_crypt = `$DOVEADM_BIN pw -s$DEFAULT_PASSWORD_SCHEME -p$user_password` or return "Cannot generate user password! System error.";
+	my $user_password_crypt = `$DOVEADM_BIN pw -s$DEFAULT_PASSWORD_SCHEME -p$user_password` or return "Cannot generate user password! System error ($!).";
 	chomp $user_password_crypt;
 	
 	# Change password
