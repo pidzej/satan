@@ -111,13 +111,13 @@ sub deluser {
 	# Drop databases
 	foreach my $db_name (@db_names) {
 		$db->{dbh}->func('dropdb', $db_name, 'admin') 
-		  or return "Cannot remove database $db_name. Database error.";
+		  or return "Cannot remove MySQL database $db_name for uid $delete_uid. Database error.";
 	}
 
 	# Drop users
 	foreach my $db_user (@db_users) {
 		$db->{del_user}->execute($db_user) 
-		  or return "Cannot remove database user $db_user. Database error.";
+		  or return "Cannot remove MySQL user $db_user for uid $delete_uid. Database error.";
 	}
 
         return;

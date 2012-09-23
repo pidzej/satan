@@ -104,7 +104,7 @@ sub deluser {
         $user_type eq 'admin' or return "Access denied!";
 
         # Delete database records
-        $deluser_users->execute($delete_uid) or return "Couldn't remove user $delete_uid. Database error.";
+        $deluser_users->execute($delete_uid) or return "Cannot remove FTP users for uid $delete_uid. Database error.";
 
         return;
 }

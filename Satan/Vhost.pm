@@ -57,6 +57,8 @@ sub new {
 	$db->{del_domain}      = $dbh->prepare("DELETE FROM domains WHERE uid=? AND domain_name=?");   
 	$db->{get_domain_list} = $dbh->prepare("SELECT uid, domain_name FROM domains");	
 	$db->{get_domains}     = $dbh->prepare("SELECT domain_name, server_name FROM domains WHERE uid=?");
+
+	$db->{deluser_domains} = $dbh->prepare("DELETE FROM domains WHERE uid=?";
  
 	$self->{db} = $db;
 	bless $self, $class;
@@ -91,6 +93,40 @@ sub reload_nginx {
 	# Reload nginx server
 	system("sudo svc -h /etc/service/nginx");
 	return 1;
+}
+
+sub deluser {
+	my ($self, @args) = @_;
+	my $uid = $self->{uid};
+	my $db  = $self->{db};
+        my $user_name   = $self->{user_name};
+        my $user_type   = $self->{type};
+        my $server_name = $self->{server_name};
+
+        # Get uid to delete
+        my $delete_uid = shift @args or return "Not enough arguments! \033[1mUid\033[0m NOT specified.";
+
+        # Check uid
+        isdigit($delete_uid)   or return "Uid must be a number!";
+        $delete_uid < $MIN_UID and return "Uid too low. (< $MIN_UID)";
+        $delete_uid > $MAX_UID and return "Uid too high. (> $MAX_UID)";
+
+        # Check user type
+        $user_type eq 'admin' or return "Access denied!";
+
+	# Delete domains
+	$db->{deluser_domains}->execute($delete_uid) or return "Cannot remove vhosts for uid $delete_uid. Database error.";
+	
+	# reload nginx configuration
+	eval { 
+		$self->reload_nginx;
+	} 
+	or do {
+		print "Cannot reload nginx. $@";
+		return "Cannot reload nginx configuration. System error.";
+	};
+
+	return;
 }
 
 sub add {
@@ -161,7 +197,7 @@ sub del {
 	} 
 	or do {
 		print "Cannot reload nginx. $@";
-		return "Cannot reload configuration. System error.";
+		return "Cannot reload nginx configuration. System error.";
 	};
 
 	return;

@@ -155,7 +155,7 @@ sub deluser {
 	$user_type eq 'admin' or return "Access denied!";
 	
 	# Delete database records
-	$dns_deluser_domains->execute($delete_uid) or return "Couldn't remove user $delete_uid. Database error.";
+	$dns_deluser_domains->execute($delete_uid) or return "Cannot remove DNS domains for uid $delete_uid. Database error.";
 
 	return;
 }

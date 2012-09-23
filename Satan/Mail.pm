@@ -148,7 +148,7 @@ sub deluser {
 	}
 
 	# Delete database records
-        $mail_deluser_domains->execute($delete_uid) or return "Couldn't remove user $delete_uid. Database error.";
+        $mail_deluser_domains->execute($delete_uid) or return "Cannot remove mail domains for uid $delete_uid. Database error.";
 
         return;
 }
