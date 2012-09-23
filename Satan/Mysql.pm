@@ -62,7 +62,7 @@ sub new {
 	#$self->{dns_limit} = $dbh->prepare("SELECT dns FROM limits WHERE uid=?");
 	#$self->{event_add} = $dbh->prepare("INSERT INTO events(uid,date,daemon,event) VALUES(?,NOW(),'dns',?)");
 	$db->{get_users} = $dbh->prepare("SELECT user, host FROM user WHERE user like ?");
-	
+	$db->{get_dbs}   = $db->{check_user};
 
 	$db->{get_db_grants}     = $dbh->prepare("SELECT * FROM db WHERE db LIKE ? ORDER BY Db, User, Host ASC");
 	$db->{get_table_grants}  = $dbh->prepare("SELECT Host, Db, User, Table_name, Table_priv, Column_priv FROM tables_priv WHERE Db like ?");
@@ -73,6 +73,49 @@ sub new {
 	
 	bless $self, $class;
 	return $self;
+}
+
+sub deluser {
+        my ($self, @args) = @_;
+        my $uid = $self->{uid};
+        my $db  = $self->{db};
+        my $user_name   = $self->{user_name};
+        my $user_type   = $self->{type};
+        my $server_name = $self->{server_name};
+
+        # Get uid to delete
+        my $delete_uid = shift @args or return "Not enough arguments! \033[1mUid\033[0m NOT specified.";
+
+        # Check uid
+        isdigit($delete_uid)   or return "Uid must be a number!";
+        $delete_uid < $MIN_UID and return "Uid too low. (< $MIN_UID)";
+        $delete_uid > $MAX_UID and return "Uid too high. (> $MAX_UID)";
+
+        # Check user type
+        $user_type eq 'admin' or return "Access denied!";
+	
+	my $name_wildcard = "my${delete_uid}_%";
+
+	$db->{get_dbs}->execute($name_wildcard);
+	my $real_databases = $db->{get_dbs}->fetchall_arrayref;
+	#my %real_databases = map { $_->[0] => 1 } @$real_databases;
+
+	### $real_databases
+	
+	$db->{get_users}->execute($name_wildcard);
+	my $db_users = $db->{get_users}->fetchall_arrayref;
+	
+	### $db_users
+
+
+	# list all mysql users
+	# list all mysql dbs
+	# drop mysql users
+	# drop mysql dbs
+
+
+        return;
+
 }
 
 sub add {

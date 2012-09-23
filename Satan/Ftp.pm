@@ -72,89 +72,39 @@ sub new {
 		WHERE uid=? AND user_name LIKE ?
 	");
 
+	$db->{deluser_users} = $dbh->prepare("DELETE FROM all_users WHERE uid=?");
+
 	$db->{dbh} = $dbh;
 	$self->{db} = $db;
 	bless $self, $class;
 	return $self;
 }
 
-sub help {
-        my $self = shift;
+sub deluser {
+        my ($self, @args) = @_;
         my $uid = $self->{uid};
-my $USAGE = <<"END_OF_USAGE";
-\033[1mSatan :: Ftp\033[0m
+        my $dbh = $self->{dbh};
+        my $user_name   = $self->{user_name};
+        my $user_type   = $self->{type};
+        my $server_name = $self->{server_name};
 
-\033[1;32mSYNTAX\033[0m
-  ftp add <user> <password> <directory> [no<privs>]   add ftp account
-  ftp del <user>                                      delete ftp account
-  ftp list                                            list all accounts
-  ftp help                                            show help
+        my $deluser_users = $self->{deluser_users};
 
-It is a good idea to genereate password with command:
-PASSWORD=\$(perl -le 'print map { ("a".."z", 0..9)[rand 36] } 1..12')
+        # Get uid to delete
+        my $delete_uid = shift @args or return "Not enough arguments! \033[1mUid\033[0m NOT specified.";
 
-END_OF_USAGE
+        # Check uid
+        isdigit($delete_uid)   or return "Uid must be a number!";
+        $delete_uid < $MIN_UID and return "Uid too low. (< $MIN_UID)";
+        $delete_uid > $MAX_UID and return "Uid too high. (> $MAX_UID)";
 
-	$self->{data} = $USAGE;
-	return;
-}
+        # Check user type
+        $user_type eq 'admin' or return "Access denied!";
 
-sub list {
-	my ($self, @args) = @_;
-	my $db          = $self->{db};
-	my $uid         = $self->{uid};
-	my $user_name   = $self->{user_name};	
-	my $server_name = $self->{server_name};
+        # Delete database records
+        $deluser_users->execute($delete_uid) or return "Couldn't remove user $delete_uid. Database error.";
 
-	# satan ftp list [<server>]
-	
-	# Get accounts from database
-	$db->{get_user}->execute($uid, '%');
-	my $has_ftp_users = $db->{get_user}->rows;
-
-	# Check if user has accounts
-	if (!$has_ftp_users) {
-		return "No accounts.";
-	}
-
-	my $listing = Satan::Tools->listing(
-		db      => $db->{get_user},
-		title   => 'FTP accounts',
-		header  => [ 'User name', 'Directory', 'mkdir', 'delete', 'upload', 'read', 'ssl', 'Created at', 'Updated at' ],
-		columns => [ qw(user_name directory mkdir_priv delete_priv upload_priv read_priv ssl_priv created_at updated_at) ],
-	);
-	
-	$self->{data} = $listing;
-	return;
-}
-
-sub del {
-	my ($self, @args) = @_;
-	my $db          = $self->{db};
-	my $uid         = $self->{uid};
-	my $user_name   = $self->{user_name};	
-	my $server_name = $self->{server_name};
-
-	# satan ftp del <user>[@<server>]
-	
-	# Get username
-	my $ftp_user = shift @args or return "Not enough arguments! \033[1mUser name\033[0m NOT specified. Go to hell or read help.";
-	   $ftp_user = lc $ftp_user;
-	   $ftp_user =~ /^[a-z0-9]{1,32}$/ or return "Not good! User name \033[1m$ftp_user\033[0m is incorrect.";
-
-	# Check account in database
-	$db->{get_user}->execute($uid, $ftp_user);
-	my $is_existing_user = $db->{get_user}->rows;
-	
-	# Account doesn't exist
-	if (!$is_existing_user) {
-		return "User \033[1m$ftp_user\033[0m NOT found.";
-	}
-	
-	# Delete from database
-	$db->{del_user}->execute($uid, $ftp_user) or return "Cannot delete FTP account \033[1m$ftp_user\033[0m. System error.";
-
-	return;
+        return;
 }
 
 sub add {
@@ -218,4 +168,86 @@ sub add {
 	
 	return;
 }
+
+
+
+sub del {
+	my ($self, @args) = @_;
+	my $db          = $self->{db};
+	my $uid         = $self->{uid};
+	my $user_name   = $self->{user_name};	
+	my $server_name = $self->{server_name};
+
+	# satan ftp del <user>[@<server>]
+	
+	# Get username
+	my $ftp_user = shift @args or return "Not enough arguments! \033[1mUser name\033[0m NOT specified. Go to hell or read help.";
+	   $ftp_user = lc $ftp_user;
+	   $ftp_user =~ /^[a-z0-9]{1,32}$/ or return "Not good! User name \033[1m$ftp_user\033[0m is incorrect.";
+
+	# Check account in database
+	$db->{get_user}->execute($uid, $ftp_user);
+	my $is_existing_user = $db->{get_user}->rows;
+	
+	# Account doesn't exist
+	if (!$is_existing_user) {
+		return "User \033[1m$ftp_user\033[0m NOT found.";
+	}
+	
+	# Delete from database
+	$db->{del_user}->execute($uid, $ftp_user) or return "Cannot delete FTP account \033[1m$ftp_user\033[0m. System error.";
+
+	return;
+}
+
+sub list {
+	my ($self, @args) = @_;
+	my $db          = $self->{db};
+	my $uid         = $self->{uid};
+	my $user_name   = $self->{user_name};	
+	my $server_name = $self->{server_name};
+
+	# satan ftp list [<server>]
+	
+	# Get accounts from database
+	$db->{get_user}->execute($uid, '%');
+	my $has_ftp_users = $db->{get_user}->rows;
+
+	# Check if user has accounts
+	if (!$has_ftp_users) {
+		return "No accounts.";
+	}
+
+	my $listing = Satan::Tools->listing(
+		db      => $db->{get_user},
+		title   => 'FTP accounts',
+		header  => [ 'User name', 'Directory', 'mkdir', 'delete', 'upload', 'read', 'ssl', 'Created at', 'Updated at' ],
+		columns => [ qw(user_name directory mkdir_priv delete_priv upload_priv read_priv ssl_priv created_at updated_at) ],
+	);
+	
+	$self->{data} = $listing;
+	return;
+}
+
+sub help {
+        my $self = shift;
+        my $uid = $self->{uid};
+my $USAGE = <<"END_OF_USAGE";
+\033[1mSatan :: Ftp\033[0m
+
+\033[1;32mSYNTAX\033[0m
+  ftp add <user> <password> <directory> [no<privs>]   add ftp account
+  ftp del <user>                                      delete ftp account
+  ftp list                                            list all accounts
+  ftp help                                            show help
+
+It is a good idea to genereate password with command:
+PASSWORD=\$(perl -le 'print map { ("a".."z", 0..9)[rand 36] } 1..12')
+
+END_OF_USAGE
+
+	$self->{data} = $USAGE;
+	return;
+}
+
 1;

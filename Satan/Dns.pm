@@ -141,10 +141,12 @@ sub deluser {
 	my $user_type   = $self->{type};
 	my $server_name = $self->{server_name};
 
-	my $dns_deluser_domains = $self->{mail_deluser_domains};
+	my $dns_deluser_domains = $self->{dns_deluser_domains};
 
 	# Get uid to delete
 	my $delete_uid = shift @args or return "Not enough arguments! \033[1mUid\033[0m NOT specified.";
+
+	# Check uid
 	isdigit($delete_uid)   or return "Uid must be a number!";
 	$delete_uid < $MIN_UID and return "Uid too low. (< $MIN_UID)";
 	$delete_uid > $MAX_UID and return "Uid too high. (> $MAX_UID)";
@@ -152,7 +154,7 @@ sub deluser {
 	# Check user type
 	$user_type eq 'admin' or return "Access denied!";
 	
-	# Delete user resources
+	# Delete database records
 	$dns_deluser_domains->execute($delete_uid) or return "Couldn't remove user $delete_uid. Database error.";
 
 	return;
