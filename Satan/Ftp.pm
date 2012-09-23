@@ -21,6 +21,8 @@ use Smart::Comments;
 $|++;
 $SIG{CHLD} = 'IGNORE';
 
+Readonly my $MIN_UID => 2000;
+Readonly my $MAX_UID => 6000;
 Readonly my $DIR_MAXLEN => 255;
 Readonly my %IS_PRIV => (
 	nomkdir  => 1,

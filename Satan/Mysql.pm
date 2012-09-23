@@ -19,9 +19,12 @@ use DBI;
 use Crypt::GeneratePassword qw(chars);
 use Data::Password qw(:all);
 use Data::Dumper;
+use POSIX qw(isdigit);
 use Readonly;
 use Smart::Comments;
 
+Readonly my $MIN_UID => 2000;
+Readonly my $MAX_UID => 6000;
 Readonly my %EXPORT_OK => (
         user  => [ qw( add del list help ) ],
         admin => [ qw( deluser ) ]
@@ -62,7 +65,7 @@ sub new {
 	#$self->{dns_limit} = $dbh->prepare("SELECT dns FROM limits WHERE uid=?");
 	#$self->{event_add} = $dbh->prepare("INSERT INTO events(uid,date,daemon,event) VALUES(?,NOW(),'dns',?)");
 	$db->{get_users} = $dbh->prepare("SELECT user, host FROM user WHERE user like ?");
-	$db->{get_dbs}   = $db->{check_user};
+	$db->{get_dbs}   = $db->{check_db};
 
 	$db->{get_db_grants}     = $dbh->prepare("SELECT * FROM db WHERE db LIKE ? ORDER BY Db, User, Host ASC");
 	$db->{get_table_grants}  = $dbh->prepare("SELECT Host, Db, User, Table_name, Table_priv, Column_priv FROM tables_priv WHERE Db like ?");
@@ -82,7 +85,7 @@ sub deluser {
         my $user_name   = $self->{user_name};
         my $user_type   = $self->{type};
         my $server_name = $self->{server_name};
-
+	
         # Get uid to delete
         my $delete_uid = shift @args or return "Not enough arguments! \033[1mUid\033[0m NOT specified.";
 
@@ -94,28 +97,30 @@ sub deluser {
         # Check user type
         $user_type eq 'admin' or return "Access denied!";
 	
+	# Get databases
 	my $name_wildcard = "my${delete_uid}_%";
-
 	$db->{get_dbs}->execute($name_wildcard);
-	my $real_databases = $db->{get_dbs}->fetchall_arrayref;
-	#my %real_databases = map { $_->[0] => 1 } @$real_databases;
+	my $db_names = $db->{get_dbs}->fetchall_arrayref;
+	my @db_names = map { $_->[0] } @$db_names;
 
-	### $real_databases
-	
+	# Get database users
 	$db->{get_users}->execute($name_wildcard);
 	my $db_users = $db->{get_users}->fetchall_arrayref;
+	my @db_users = map { $_->[0] } @$db_users;
 	
-	### $db_users
+	# Drop databases
+	foreach my $db_name (@db_names) {
+		$db->{dbh}->func('dropdb', $db_name, 'admin') 
+		  or return "Cannot remove database $db_name. Database error.";
+	}
 
-
-	# list all mysql users
-	# list all mysql dbs
-	# drop mysql users
-	# drop mysql dbs
-
+	# Drop users
+	foreach my $db_user (@db_users) {
+		$db->{del_user}->execute($db_user) 
+		  or return "Cannot remove database user $db_user. Database error.";
+	}
 
         return;
-
 }
 
 sub add {
