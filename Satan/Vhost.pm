@@ -26,7 +26,9 @@ use Readonly;
 $|++;
 $SIG{CHLD} = 'IGNORE';
 
-Readonly my $NGINX_MAP_FILE    => '/etc/nginx/conf.d/map.conf';
+Readonly my $NGINX_MAP_FILE => '/etc/nginx/conf.d/map.conf';
+Readonly my $MIN_UID        => 2000;
+Readonly my $MAX_UID        => 6000; 
 Readonly my %EXPORT_OK => (
         user  => [ qw( add del list help ) ],
         admin => [ qw( deluser ) ]
@@ -58,7 +60,7 @@ sub new {
 	$db->{get_domain_list} = $dbh->prepare("SELECT uid, domain_name FROM domains");	
 	$db->{get_domains}     = $dbh->prepare("SELECT domain_name, server_name FROM domains WHERE uid=?");
 
-	$db->{deluser_domains} = $dbh->prepare("DELETE FROM domains WHERE uid=?";
+	$db->{deluser_domains} = $dbh->prepare("DELETE FROM domains WHERE uid=?");
  
 	$self->{db} = $db;
 	bless $self, $class;
