@@ -14,6 +14,7 @@ use strict;
 use utf8;
 use Satan::Tools;
 use FindBin qw($Bin);
+use POSIX qw(isdigit);
 use Data::Password qw(IsBadPassword);
 use Readonly;
 use Smart::Comments;

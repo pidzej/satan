@@ -15,6 +15,7 @@ use DBI;
 use Data::Dumper;
 use Tie::File;
 use FindBin qw($Bin);
+use POSIX qw(isdigit);
 use feature 'switch';
 use utf8;
 use warnings;
