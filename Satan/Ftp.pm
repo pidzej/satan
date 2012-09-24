@@ -86,7 +86,7 @@ sub new {
 sub deluser {
         my ($self, @args) = @_;
         my $uid = $self->{uid};
-        my $dbh = $self->{dbh};
+        my $db  = $self->{db};
         my $user_name   = $self->{user_name};
         my $user_type   = $self->{type};
         my $server_name = $self->{server_name};
